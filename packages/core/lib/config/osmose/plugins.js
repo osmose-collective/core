@@ -31,7 +31,7 @@ module.exports = {
       host: process.env.ARK_DB_HOST || 'localhost',
       port: process.env.ARK_DB_PORT || 5432,
       database: process.env.ARK_DB_DATABASE || 'ark_osmose',
-      user: process.env.ARK_DB_USERNAME || 'zaraki',
+      user: process.env.ARK_DB_USERNAME || 'osmose',
       password: process.env.ARK_DB_PASSWORD || 'password'
     },
     redis: {
