@@ -115,19 +115,19 @@ module.exports = class ConnectionInterface {
   }
 
   /**
-   * Save the given block (async version).
+   * Save the given number of block (async version) in the memory Must call saveBlockCommit() to save to database.
    * NOTE: to use when rebuilding to decrease the number of database transactions, and commit blocks (save only every 1000s for instance) using saveBlockCommit
    * @param  {Block} block
    * @return {void}
    * @throws Error
    */
-  async saveBlockAsync (block) {
-    throw new Error('Method [saveBlockAsync] not implemented!')
+  async enqueueSaveBlockAsync (block) {
+    throw new Error('Method [enqueueSaveBlockAsync] not implemented!')
   }
 
   /**
    * Commit the block save database transaction.
-   * NOTE: to be used in combination with saveBlockAsync
+   * NOTE: to be used in combination with enqueueSaveBlockAsync
    * @return {void}
    * @throws Error
    */
@@ -143,7 +143,7 @@ module.exports = class ConnectionInterface {
    * @throws Error
    */
   async deleteBlockAsync (block) {
-    throw new Error('Method [saveBlockAsync] not implemented!')
+    throw new Error('Method [deleteBlockAsync] not implemented!')
   }
 
   /**
@@ -292,12 +292,12 @@ module.exports = class ConnectionInterface {
     if (nextHeight % maxDelegates === 1) {
       const round = Math.floor((nextHeight - 1) / maxDelegates) + 1
 
-      if (!this.activedelegates || this.activedelegates.length === 0 || (this.activedelegates.length && this.activedelegates[0].round !== round)) {
+      if (!this.activeDelegates || this.activeDelegates.length === 0 || (this.activeDelegates.length && this.activeDelegates[0].round !== round)) {
         logger.info(`Starting Round ${round} :dove_of_peace:`)
 
         try {
           this.walletManager.updateDelegates()
-          this.updateDelegateStats(height, this.activedelegates)
+          this.updateDelegateStats(height, this.activeDelegates)
           await this.saveWallets(false) // save only modified wallets during the last round
           const delegates = await this.buildDelegates(maxDelegates, nextHeight) // active build delegate list from database state
           await this.saveRound(delegates) // save next round delegate list

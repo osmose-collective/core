@@ -150,10 +150,10 @@ exports.getStatus = {
 
     return {
       success: true,
-      height: lastBlock.data.height,
+      height: lastBlock ? lastBlock.data.height : 0,
       forgingAllowed: slots.isForgingAllowed(),
       currentSlot: slots.getSlotNumber(),
-      header: lastBlock.getHeader()
+      header: lastBlock ? lastBlock.getHeader() : {}
     }
   }
 }
@@ -189,7 +189,7 @@ exports.postBlock = {
       const b = new Block(block)
 
       if (!b.verification.verified) {
-        throw new Error('invalid block received')
+        return {success: false}
       }
 
       blockchain.pushPingBlock(b.data)
@@ -279,7 +279,8 @@ exports.postTransactions = {
     const { valid, invalid } = transactionPool.memory.memorize(request.payload.transactions)
 
     const guard = new TransactionGuard(transactionPool)
-    guard.invalid = invalid
+    guard.invalidate(invalid, 'Already memorized.')
+
     await guard.validate(valid)
 
     if (guard.hasAny('invalid')) {

@@ -43,12 +43,23 @@ module.exports = async (config) => {
   })
 
   await server.register({
+    plugin: require('./plugins/set-headers')
+  })
+
+  await server.register({
     plugin: require('hapi-api-version'),
     options: {
       validVersions: config.versions.valid,
       defaultVersion: config.versions.default,
       basePath: '/api/',
-      vendorName: 'arkCoreApi'
+      vendorName: 'ark.core-api'
+    }
+  })
+
+  await server.register({
+    plugin: require('./plugins/endpoint-version'),
+    options: {
+      validVersions: config.versions.valid
     }
   })
 

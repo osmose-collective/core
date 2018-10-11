@@ -154,8 +154,8 @@ module.exports = class PostgresConnection extends ConnectionInterface {
     const maxDelegates = config.getConstants(height).activeDelegates
     const round = Math.floor((height - 1) / maxDelegates) + 1
 
-    if (this.activedelegates && this.activedelegates.length && this.activedelegates[0].round === round) {
-      return this.activedelegates
+    if (this.activeDelegates && this.activeDelegates.length && this.activeDelegates[0].round === round) {
+      return this.activeDelegates
     }
 
     const data = await this.db.rounds.findById(round)
@@ -173,9 +173,9 @@ module.exports = class PostgresConnection extends ConnectionInterface {
       currentSeed = crypto.createHash('sha256').update(currentSeed).digest()
     }
 
-    this.activedelegates = data
+    this.activeDelegates = data
 
-    return this.activedelegates
+    return this.activeDelegates
   }
 
   /**
@@ -346,12 +346,12 @@ module.exports = class PostgresConnection extends ConnectionInterface {
   }
 
   /**
-   * Commit the given block (async version).
+   * Stores the block in memory. Generated insert statements are stored in the this.asyncTransaction, to be later saved to the database by calling saveBlockCommit.
    * NOTE: to use when rebuilding to decrease the number of database tx, and commit blocks (save only every 1000s for instance) using saveBlockCommit
    * @param  {Block} block
    * @return {void}
    */
-  async saveBlockAsync (block) {
+  enqueueSaveBlockAsync (block) {
     if (!this.asyncTransaction) {
       this.asyncTransaction = []
     }
@@ -361,13 +361,11 @@ module.exports = class PostgresConnection extends ConnectionInterface {
     if (block.transactions.length > 0) {
       this.asyncTransaction.push(this.db.transactions.create(block.transactions))
     }
-
-    await this.db.tx(t => t.batch(this.asyncTransaction))
   }
 
   /**
    * Commit the block database transaction.
-   * NOTE: to be used in combination with saveBlockAsync
+   * NOTE: to be used in combination with enqueueSaveBlockAsync
    * @return {void}
    */
   async saveBlockCommit () {

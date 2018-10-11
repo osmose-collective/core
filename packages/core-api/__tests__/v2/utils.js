@@ -14,6 +14,15 @@ class Helpers {
     return apiHelpers.request(server, method, url, headers, params)
   }
 
+  async requestWithAcceptHeader (method, path, params = {}) {
+    const url = `http://localhost:4003/api/${path}`
+    const headers = { 'Accept': 'application/vnd.ark.core-api.v2+json' }
+
+    const server = require('@arkecosystem/core-container').resolvePlugin('api')
+
+    return apiHelpers.request(server, method, url, headers, params)
+  }
+
   expectJson (response) {
     expect(response.data).toBeObject()
   }
@@ -109,6 +118,9 @@ class Helpers {
     expect(delegate.production).toBeObject()
     expect(delegate.production.approval).toBeNumber()
     expect(delegate.production.productivity).toBeNumber()
+    expect(delegate.forged.fees).toBeNumber()
+    expect(delegate.forged.rewards).toBeNumber()
+    expect(delegate.forged.total).toBeNumber()
 
     Object.keys(expected || {}).forEach(attr => {
       expect(delegate[attr]).toBe(expected[attr])
