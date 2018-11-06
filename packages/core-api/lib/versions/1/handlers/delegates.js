@@ -19,7 +19,13 @@ exports.index = {
    * @return {Hapi.Response}
    */
   async handler (request, h) {
-    const { count, rows } = await database.delegates.findAll(request.query)
+    const { count, rows } = await database.delegates.paginate({
+      ...request.query,
+      ...{
+        offset: request.query.offset || 0,
+        limit: request.query.limit || 51
+      }
+    })
 
     return utils.respondWith({
       delegates: utils.toCollection(request, rows, 'delegate'),
@@ -97,7 +103,7 @@ exports.search = {
     const query = {
       username: request.query.q
     }
-    const { rows } = await database.delegates.search({...query, ...utils.paginate(request)})
+    const { rows } = await database.delegates.search({ ...query, ...utils.paginate(request) })
 
     return utils.respondWith({
       delegates: utils.toCollection(request, rows, 'delegate')

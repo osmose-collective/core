@@ -5,6 +5,12 @@ module.exports = {
     reason: 'Blacklisted',
     weight: 10
   },
+  NO_COMMON_BLOCKS: {
+    number: 5,
+    period: 'minutes',
+    reason: 'No Common Blocks',
+    weight: 1
+  },
   INVALID_VERSION: {
     number: 6,
     period: 'hours',
@@ -58,5 +64,11 @@ module.exports = {
     period: 'day',
     reason: 'Repeat Offender',
     weight: 100
+  },
+  FORK: {
+    number: 1,
+    period: 'day',
+    reason: 'Fork',
+    weight: 150
   }
 }

@@ -43,6 +43,15 @@ class TransactionsRepository extends Repository {
           }
         }
       }
+
+      for (const item of queries) {
+        if (parameters.ownerId) {
+          const owner = database.walletManager.findByAddress(parameters.ownerId)
+
+          item.and(this.query.sender_public_key.equals(owner.publicKey))
+          item.or(this.query.recipient_id.equals(owner.address))
+        }
+      }
     }
 
     applyConditions([selectQuery, countQuery])
@@ -142,7 +151,7 @@ class TransactionsRepository extends Repository {
    * @return {Object}
    */
   async findAllBySender (senderPublicKey, parameters = {}) {
-    return this.findAll({...{senderPublicKey}, ...parameters})
+    return this.findAll({ ...{ senderPublicKey }, ...parameters })
   }
 
   /**
@@ -152,7 +161,7 @@ class TransactionsRepository extends Repository {
    * @return {Object}
    */
   async findAllByRecipient (recipientId, parameters = {}) {
-    return this.findAll({...{recipientId}, ...parameters})
+    return this.findAll({ ...{ recipientId }, ...parameters })
   }
 
   /**
@@ -163,7 +172,7 @@ class TransactionsRepository extends Repository {
    * @return {Object}
    */
   async allVotesBySender (senderPublicKey, parameters = {}) {
-    return this.findAll({...{senderPublicKey, type: TRANSACTION_TYPES.VOTE}, ...parameters})
+    return this.findAll({ ...{ senderPublicKey, type: TRANSACTION_TYPES.VOTE }, ...parameters })
   }
 
   /**
@@ -173,7 +182,7 @@ class TransactionsRepository extends Repository {
    * @return {Object}
    */
   async findAllByBlock (blockId, parameters = {}) {
-    return this.findAll({...{blockId}, ...parameters})
+    return this.findAll({ ...{ blockId }, ...parameters })
   }
 
   /**
@@ -183,7 +192,7 @@ class TransactionsRepository extends Repository {
    * @return {Object}
    */
   async findAllByType (type, parameters = {}) {
-    return this.findAll({...{type}, ...parameters})
+    return this.findAll({ ...{ type }, ...parameters })
   }
 
   /**
@@ -338,7 +347,7 @@ class TransactionsRepository extends Repository {
       const missingFromCache = []
 
       for (let i = 0; i < data.length; i++) {
-        const cachedBlock = await this.__getBlockCache(data[i].blockId)
+        const cachedBlock = this.__getBlockCache(data[i].blockId)
 
         if (cachedBlock) {
           data[i].block = cachedBlock
@@ -374,7 +383,7 @@ class TransactionsRepository extends Repository {
 
     // Object...
     if (data) {
-      const cachedBlock = await this.__getBlockCache(data.blockId)
+      const cachedBlock = this.__getBlockCache(data.blockId)
 
       if (cachedBlock) {
         data.block = cachedBlock
@@ -398,8 +407,8 @@ class TransactionsRepository extends Repository {
    * @param  {String} blockId
    * @return {Object|null}
    */
-  async __getBlockCache (blockId) {
-    const height = await this.cache.get(`heights:${blockId}`)
+  __getBlockCache (blockId) {
+    const height = this.cache.get(`heights:${blockId}`)
 
     return height ? ({ height, id: blockId }) : null
   }
@@ -425,7 +434,7 @@ class TransactionsRepository extends Repository {
 
   __orderBy (parameters) {
     return parameters.orderBy
-      ? parameters.orderBy.split(':')
+      ? parameters.orderBy.split(':').map(p => p.toLowerCase())
       : ['timestamp', 'desc']
   }
 }

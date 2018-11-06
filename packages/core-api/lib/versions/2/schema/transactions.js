@@ -9,7 +9,24 @@ const container = require('@arkecosystem/core-container')
  * @type {Object}
  */
 exports.index = {
-  query: {...pagination, ...{ orderBy: Joi.string() }}
+  query: {
+    ...pagination,
+    ...{
+      orderBy: Joi.string(),
+      id: Joi.string().hex().length(64),
+      blockId: Joi.string(),
+      type: Joi.number().integer().min(0),
+      version: Joi.number().integer().positive(),
+      senderPublicKey: Joi.string().hex().length(66),
+      senderId: Joi.string().alphanum().length(34),
+      recipientId: Joi.string().alphanum().length(34),
+      ownerId: Joi.string().alphanum().length(34),
+      timestamp: Joi.number().integer().min(0),
+      amount: Joi.number().integer().min(0),
+      fee: Joi.number().integer().min(0),
+      vendorFieldHex: Joi.string().hex()
+    }
+  }
 }
 
 /**
@@ -52,25 +69,27 @@ exports.showUnconfirmed = {
 exports.search = {
   query: pagination,
   payload: {
-    id: Joi.string(),
+    orderBy: Joi.string(),
+    id: Joi.string().hex().length(64),
     blockId: Joi.string(),
-    type: Joi.number().integer(),
-    version: Joi.number().integer(),
-    senderId: Joi.string(),
-    senderPublicKey: Joi.string(),
-    recipientId: Joi.string(),
+    type: Joi.number().integer().min(0),
+    version: Joi.number().integer().positive(),
+    senderPublicKey: Joi.string().hex().length(66),
+    senderId: Joi.string().alphanum().length(34),
+    recipientId: Joi.string().alphanum().length(34),
+    ownerId: Joi.string().alphanum().length(34),
     vendorFieldHex: Joi.string().hex(),
     timestamp: Joi.object().keys({
-      from: Joi.number().integer(),
-      to: Joi.number().integer()
+      from: Joi.number().integer().min(0),
+      to: Joi.number().integer().min(0)
     }),
     amount: Joi.object().keys({
-      from: Joi.number().integer(),
-      to: Joi.number().integer()
+      from: Joi.number().integer().min(0),
+      to: Joi.number().integer().min(0)
     }),
     fee: Joi.object().keys({
-      from: Joi.number().integer(),
-      to: Joi.number().integer()
+      from: Joi.number().integer().min(0),
+      to: Joi.number().integer().min(0)
     })
   }
 }

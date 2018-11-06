@@ -1,6 +1,6 @@
 const configManager = require('../managers/config')
-const { ARKTOSHI, TRANSACTION_TYPES } = require('../constants')
-const Bignum = require('../utils/bignum')
+const { TRANSACTION_TYPES } = require('../constants')
+const { Bignum, formatArktoshi } = require('../utils')
 const crypto = require('../crypto/crypto')
 const transactionHandler = require('../handlers/transactions')
 
@@ -110,8 +110,11 @@ module.exports = class Wallet {
   /**
    * Add block data to this wallet.
    * @param {Block} block
+   * @returns {Boolean}
    */
   applyBlock (block) {
+    this.dirty = true
+
     if (block.generatorPublicKey === this.publicKey || crypto.getAddress(block.generatorPublicKey) === this.address) {
       this.balance = this.balance.plus(block.reward).plus(block.totalFee)
 
@@ -120,9 +123,10 @@ module.exports = class Wallet {
       this.forgedFees = this.forgedFees.plus(block.totalFee)
       this.forgedRewards = this.forgedRewards.plus(block.reward)
       this.lastBlock = block
+      return true
     }
 
-    this.dirty = true
+    return false
   }
 
   /**
@@ -130,6 +134,8 @@ module.exports = class Wallet {
    * @param {Block} block
    */
   revertBlock (block) {
+    this.dirty = true
+
     if (block.generatorPublicKey === this.publicKey || crypto.getAddress(block.generatorPublicKey) === this.address) {
       this.balance = this.balance.minus(block.reward).minus(block.totalFee)
 
@@ -141,9 +147,10 @@ module.exports = class Wallet {
 
       // TODO: get it back from database?
       this.lastBlock = null
+      return true
     }
 
-    this.dirty = true
+    return false
   }
 
   /**
@@ -197,13 +204,13 @@ module.exports = class Wallet {
   auditApply (transaction) {
     const audit = []
 
-    audit.push({'Network': configManager.config})
+    audit.push({ 'Network': configManager.config })
 
     if (this.multisignature) {
-      audit.push({'Mutisignature': this.verifySignatures(transaction, this.multisignature)})
+      audit.push({ 'Mutisignature': this.verifySignatures(transaction, this.multisignature) })
     } else {
-      audit.push({'Remaining amount': this.balance.minus(transaction.amount).minus(transaction.fee).toNumber()})
-      audit.push({'Signature validation': crypto.verify(transaction)})
+      audit.push({ 'Remaining amount': +(this.balance.minus(transaction.amount).minus(transaction.fee)).toFixed() })
+      audit.push({ 'Signature validation': crypto.verify(transaction) })
       // TODO: this can blow up if 2nd phrase and other transactions are in the wrong order
       if (this.secondPublicKey) {
         audit.push({
@@ -213,66 +220,66 @@ module.exports = class Wallet {
     }
 
     if (transaction.type === TRANSACTION_TYPES.TRANSFER) {
-      audit.push({'Transfer': true})
+      audit.push({ 'Transfer': true })
     }
 
     if (transaction.type === TRANSACTION_TYPES.SECOND_SIGNATURE) {
-      audit.push({'Second public key': this.secondPublicKey})
+      audit.push({ 'Second public key': this.secondPublicKey })
     }
 
     if (transaction.type === TRANSACTION_TYPES.DELEGATE_REGISTRATION) {
       const username = transaction.asset.delegate.username
-      audit.push({'Current username': this.username})
-      audit.push({'New username': username})
+      audit.push({ 'Current username': this.username })
+      audit.push({ 'New username': username })
     }
 
     if (transaction.type === TRANSACTION_TYPES.VOTE) {
-      audit.push({'Current vote': this.vote})
-      audit.push({'New vote': transaction.asset.votes[0]})
+      audit.push({ 'Current vote': this.vote })
+      audit.push({ 'New vote': transaction.asset.votes[0] })
     }
 
     if (transaction.type === TRANSACTION_TYPES.MULTI_SIGNATURE) {
       const keysgroup = transaction.asset.multisignature.keysgroup
-      audit.push({'Multisignature not yet registered': !this.multisignature})
-      audit.push({'Multisignature enough keys': keysgroup.length >= transaction.asset.multisignature.min})
-      audit.push({'Multisignature all keys signed': keysgroup.length === transaction.signatures.length})
-      audit.push({'Multisignature verification': this.verifySignatures(transaction, transaction.asset.multisignature)})
+      audit.push({ 'Multisignature not yet registered': !this.multisignature })
+      audit.push({ 'Multisignature enough keys': keysgroup.length >= transaction.asset.multisignature.min })
+      audit.push({ 'Multisignature all keys signed': keysgroup.length === transaction.signatures.length })
+      audit.push({ 'Multisignature verification': this.verifySignatures(transaction, transaction.asset.multisignature) })
     }
 
     if (transaction.type === TRANSACTION_TYPES.IPFS) {
-      audit.push({'IPFS': true})
+      audit.push({ 'IPFS': true })
     }
 
     if (transaction.type === TRANSACTION_TYPES.TIMELOCK_TRANSFER) {
-      audit.push({'Timelock': true})
+      audit.push({ 'Timelock': true })
     }
 
     if (transaction.type === TRANSACTION_TYPES.MULTI_PAYMENT) {
       const amount = transaction.asset.payments.reduce((a, p) => (a.plus(p.amount)), Bignum.ZERO)
-      audit.push({'Multipayment remaining amount': amount})
+      audit.push({ 'Multipayment remaining amount': amount })
     }
 
     if (transaction.type === TRANSACTION_TYPES.DELEGATE_RESIGNATION) {
-      audit.push({'Resignate Delegate': this.username})
+      audit.push({ 'Resignate Delegate': this.username })
     }
 
     if (transaction.type === TRANSACTION_TYPES.DELEGATE_RESIGNATION) {
-      audit.push({'Resignate Delegate': this.username})
+      audit.push({ 'Resignate Delegate': this.username })
     }
 
     if (!Object.values(TRANSACTION_TYPES).includes(transaction.type)) {
-      audit.push({'Unknown Type': true})
+      audit.push({ 'Unknown Type': true })
     }
 
     return audit
   }
 
   /**
-   * Get formatted wallet balance as string.
+   * Get formatted wallet address and balance as string.
    * @return {String}
    */
   toString () {
-    return `${this.address} (${this.balance.toNumber() / ARKTOSHI} ${configManager.config.client.symbol})`
+    return `${this.address} (${formatArktoshi(this.balance)})`
   }
 
   /**

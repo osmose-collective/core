@@ -51,7 +51,7 @@ exports.store = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
- async handler (request, h) {
+  async handler (request, h) {
     const blockchain = container.resolvePlugin('blockchain')
 
     if (blockchain.pingBlock(request.payload.block)) {
@@ -130,11 +130,11 @@ exports.common = {
 
     const ids = request.query.blocks.split(',').slice(0, 9).filter(id => id.match(/^\d+$/))
 
-    const commonBlock = await database.getCommonBlock(ids)
+    const commonBlocks = await database.getCommonBlocks(ids)
 
     return {
       data: {
-        common: commonBlock.length ? commonBlock[0] : null,
+        common: commonBlocks.length ? commonBlocks[0] : null,
         lastBlockHeight: blockchain.getLastBlock().data.height
       }
     }

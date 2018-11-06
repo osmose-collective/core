@@ -6,8 +6,8 @@ const axiosMock = new MockAdapter(axios)
 const delay = require('delay')
 
 const { asValue } = require('awilix')
-const { slots } = require('@arkecosystem/crypto')
-const { Block } = require('@arkecosystem/crypto').models
+const { crypto, slots } = require('@arkecosystem/crypto')
+const { Block, Wallet } = require('@arkecosystem/crypto').models
 
 const app = require('./__support__/setup')
 
@@ -31,18 +31,21 @@ beforeAll(async () => {
   // Mock peer responses so that we can have blocks
   __mockPeer()
 
-  // Manually register the blockchain and start it
-  await __start()
-
   // Create the genesis block after the setup has finished or else it uses a potentially
   // wrong network config.
   genesisBlock = new Block(require('@arkecosystem/core-test-utils/config/testnet/genesisBlock.json'))
+
+  // Manually register the blockchain and start it
+  await __start()
 })
 
 afterAll(async () => {
   axiosMock.reset()
 
   await __resetToHeight1()
+
+  // Manually stop the blockchain
+  await blockchain.stop()
 
   await app.tearDown()
 })
@@ -65,7 +68,7 @@ describe('Blockchain', () => {
     it('should be ok', () => {
       const nextState = blockchain.dispatch('START')
 
-      expect(blockchain.stateMachine.state.blockchain).toEqual(nextState)
+      expect(blockchain.state.blockchain).toEqual(nextState)
     })
   })
 
@@ -79,7 +82,7 @@ describe('Blockchain', () => {
 
       const started = await blockchain.start(true)
 
-      expect(started).toBeTruthy()
+      expect(started).toBeTrue()
     })
   })
 
@@ -113,23 +116,6 @@ describe('Blockchain', () => {
     it('should be a function', () => {
       expect(blockchain.resetState).toBeFunction()
     })
-
-    it('should be ok', async () => {
-      const stateBackup = Object.assign({}, blockchain.stateMachine.state)
-
-      await blockchain.resetState()
-
-      expect(blockchain.stateMachine.state).toEqual({
-        blockchain: blockchain.stateMachine.initialState,
-        started: false,
-        lastBlock: null,
-        lastDownloadedBlock: null,
-        blockPing: null,
-        noBlockCounter: 0
-      })
-
-      blockchain.stateMachine.state = stateBackup
-    })
   })
 
   describe('postTransactions', () => {
@@ -140,7 +126,7 @@ describe('Blockchain', () => {
     it('should be ok', async () => {
       await blockchain.transactionPool.flush()
       await blockchain.postTransactions(genesisBlock.transactions, false)
-      const transactions = await blockchain.transactionPool.getTransactions(0, 200)
+      const transactions = blockchain.transactionPool.getTransactions(0, 200)
 
       expect(transactions.length).toBe(genesisBlock.transactions.length)
 
@@ -161,7 +147,7 @@ describe('Blockchain', () => {
 
       await blockchain.queueBlock(blocks101to155[54])
 
-      expect(blockchain.stateMachine.state.lastDownloadedBlock).toEqual(block)
+      expect(blockchain.state.lastDownloadedBlock).toEqual(block)
     })
   })
 
@@ -268,8 +254,8 @@ describe('Blockchain', () => {
 
       expect(await blockchain.database.getLastBlock()).toEqual(lastBlock)
 
-      // manually set blockchain.stateMachine.state.lastBlock because acceptChainedBlock doesn't do it
-      blockchain.stateMachine.state.lastBlock = lastBlock
+      // manually set lastBlock because acceptChainedBlock doesn't do it
+      blockchain.state.setLastBlock(lastBlock)
     })
   })
 
@@ -323,7 +309,7 @@ describe('Blockchain', () => {
         expect(blockchain.isSynced({ data: {
           timestamp: slots.getTime(),
           height: genesisBlock.height
-        } })).toBeTruthy()
+        } })).toBeTrue()
       })
     })
 
@@ -333,7 +319,7 @@ describe('Blockchain', () => {
           timestamp: slots.getTime() - genesisBlock.timestamp,
           height: genesisBlock.height
         }))
-        expect(blockchain.isSynced()).toBeTruthy()
+        expect(blockchain.isSynced()).toBeTrue()
         expect(blockchain.getLastBlock()).toHaveBeenCalledWith(true)
       })
     })
@@ -349,7 +335,7 @@ describe('Blockchain', () => {
         expect(blockchain.isRebuildSynced({ data: {
           timestamp: slots.getTime() - 3600 * 24 * 6,
           height: blocks101to155[52].height
-        } })).toBeTruthy()
+        } })).toBeTrue()
       })
     })
 
@@ -359,7 +345,7 @@ describe('Blockchain', () => {
           timestamp: slots.getTime() - genesisBlock.timestamp,
           height: genesisBlock.height
         }))
-        expect(blockchain.isRebuildSynced()).toBeTruthy()
+        expect(blockchain.isRebuildSynced()).toBeTrue()
         expect(blockchain.getLastBlock()).toHaveBeenCalledWith(true)
       })
     })
@@ -371,7 +357,7 @@ describe('Blockchain', () => {
     })
 
     it('should be ok', () => {
-      blockchain.stateMachine.state.lastBlock = genesisBlock
+      blockchain.state.setLastBlock(genesisBlock)
 
       expect(blockchain.getLastBlock()).toEqual(genesisBlock)
     })
@@ -400,7 +386,7 @@ describe('Blockchain', () => {
         }
       }
 
-      expect(blockchain.__isChained(previousBlock, nextBlock)).toBeTruthy()
+      expect(blockchain.__isChained(previousBlock, nextBlock)).toBeTrue()
     })
 
     it('should not be ok', () => {
@@ -421,7 +407,7 @@ describe('Blockchain', () => {
         }
       }
 
-      expect(blockchain.__isChained(previousBlock, nextBlock)).toBeFalsy()
+      expect(blockchain.__isChained(previousBlock, nextBlock)).toBeFalse()
     })
   })
 
@@ -471,7 +457,21 @@ async function __start () {
 async function __resetToHeight1 () {
   const lastBlock = await blockchain.database.getLastBlock()
   if (lastBlock) {
-    blockchain.stateMachine.state.lastBlock = lastBlock
+    // Make sure the wallet manager has been fed or else revertRound
+    // cannot determine the previous delegates. This is only necessary, because
+    // the database is not dropped after the unit tests are done.
+    await blockchain.database.buildWallets(lastBlock.data.height)
+
+    // Index the genesis wallet or else revert block at height 1 fails
+    const generator = crypto.getAddress(genesisBlock.data.generatorPublicKey)
+    const genesis = new Wallet(generator)
+    genesis.publicKey = genesisBlock.data.generatorPublicKey
+    genesis.username = 'genesis'
+    blockchain.database.walletManager.reindex(genesis)
+
+    blockchain.state.clear()
+
+    blockchain.state.setLastBlock(lastBlock)
     await blockchain.removeBlocks(lastBlock.data.height - 1)
   }
 }

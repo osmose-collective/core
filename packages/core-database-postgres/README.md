@@ -1,6 +1,8 @@
-![ARK Core](https://i.imgur.com/1aP6F2o.png)
+# Ark Core - PostgreSQL Database Provider
 
-# ARK Core - PostgreSQL Database Provider
+<p align="center">
+    <img src="../../banner.png?sanitize=true" />
+</p>
 
 ## Installation
 
@@ -10,23 +12,19 @@ yarn add @arkecosystem/core-database-postgres
 
 ## Configuration
 
-### Defaults
-
 ```js
 module.exports = {
   initialization: {
-    capSQL: true
+    capSQL: true,
+    promiseLib: require('bluebird'),
+    noLocking: process.env.NODE_ENV === 'test'
   },
   connection: {
     host: process.env.ARK_DB_HOST || 'localhost',
     port: process.env.ARK_DB_PORT || 5432,
-    database: process.env.ARK_DB_USERNAME || `ark_${process.env.ARK_NETWORK_NAME}`,
-    user: process.env.ARK_DB_PASSWORD || 'ark',
-    password: process.env.ARK_DB_DATABASE || 'password'
-  },
-  redis: {
-    host: process.env.ARK_REDIS_HOST || 'localhost',
-    port: process.env.ARK_REDIS_PORT || 6379
+    database: process.env.ARK_DB_DATABASE || `ark_${process.env.ARK_NETWORK_NAME}`,
+    user: process.env.ARK_DB_USERNAME || 'ark',
+    password: process.env.ARK_DB_PASSWORD || 'password'
   }
 }
 ```

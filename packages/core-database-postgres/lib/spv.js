@@ -41,11 +41,11 @@ module.exports = class SPV {
     logger.printTracker('SPV', 5, 8, 'Second Signatures')
     await this.__buildSecondSignatures()
 
-    logger.printTracker('SPV', 6, 8, 'Delegates')
-    await this.__buildDelegates()
-
-    logger.printTracker('SPV', 7, 8, 'Votes')
+    logger.printTracker('SPV', 6, 8, 'Votes')
     await this.__buildVotes()
+
+    logger.printTracker('SPV', 7, 8, 'Delegates')
+    await this.__buildDelegates()
 
     logger.printTracker('SPV', 8, 8, 'MultiSignatures')
     await this.__buildMultisignatures()
@@ -53,6 +53,8 @@ module.exports = class SPV {
     logger.stopTracker('SPV', 8, 8)
     logger.info(`SPV rebuild finished, wallets in memory: ${Object.keys(this.walletManager.byAddress).length}`)
     logger.info(`Number of registered delegates: ${Object.keys(this.walletManager.byUsername).length}`)
+
+    return this.__verifyWalletsConsistency()
   }
 
   /**
@@ -138,6 +140,33 @@ module.exports = class SPV {
   }
 
   /**
+   * Load and apply votes to wallets.
+   * @return {void}
+   */
+  async __buildVotes () {
+    const transactions = await this.query.manyOrNone(queries.spv.votes)
+
+    for (const transaction of transactions) {
+      const wallet = this.walletManager.findByPublicKey(transaction.senderPublicKey)
+
+      if (!wallet.voted) {
+        const vote = Transaction.deserialize(transaction.serialized.toString('hex')).asset.votes[0]
+
+        if (vote.startsWith('+')) {
+          wallet.vote = vote.slice(1)
+        }
+
+        // NOTE: The "voted" property is only used within this loop to avoid an issue
+        // that results in not properly applying "unvote" transactions as the "vote" property
+        // would be empty in that case and return a false result.
+        wallet.voted = true
+      }
+    }
+
+    this.walletManager.buildVoteBalances()
+  }
+
+  /**
    * Load and apply delegate usernames to wallets.
    * @return {void}
    */
@@ -162,35 +191,12 @@ module.exports = class SPV {
 
     // NOTE: This is highly NOT reliable, however the number of missed blocks is NOT used for the consensus
     const delegates = await this.query.manyOrNone(queries.spv.delegatesRanks)
-    delegates.forEach(delegate => {
+    delegates.forEach((delegate, i) => {
       const wallet = this.walletManager.findByPublicKey(delegate.publicKey)
       wallet.missedBlocks = parseInt(delegate.missedBlocks)
+      wallet.rate = i + 1
       this.walletManager.reindex(wallet)
     })
-  }
-
-  /**
-   * Load and apply votes to wallets.
-   * @return {void}
-   */
-  async __buildVotes () {
-    const transactions = await this.query.manyOrNone(queries.spv.votes)
-
-    for (const transaction of transactions) {
-      const wallet = this.walletManager.findByPublicKey(transaction.senderPublicKey)
-
-      if (!wallet.voted) {
-        const vote = Transaction.deserialize(transaction.serialized.toString('hex')).asset.votes[0]
-
-        if (vote.startsWith('+')) {
-          wallet.vote = vote.slice(1)
-        }
-
-        wallet.voted = true
-      }
-    }
-
-    this.walletManager.updateDelegates()
   }
 
   /**
@@ -207,5 +213,39 @@ module.exports = class SPV {
         wallet.multisignature = Transaction.deserialize(transaction.serialized.toString('hex')).asset.multisignature
       }
     }
+  }
+
+  /**
+   * Verify the consistency of the wallets table by comparing all records against
+   * the in memory wallets.
+   * NOTE: This is faster than rebuilding the entire table from scratch each time.
+   * @returns {Boolean}
+   */
+  async __verifyWalletsConsistency () {
+    const dbWallets = await this.query.manyOrNone(queries.wallets.all)
+    const inMemoryWallets = this.walletManager.allByPublicKey()
+
+    let detectedInconsistency = false
+    if (dbWallets.length !== inMemoryWallets.length) {
+      detectedInconsistency = true
+    } else {
+      for (const dbWallet of dbWallets) {
+        const inMemoryWallet = this.walletManager.findByPublicKey(dbWallet.publicKey)
+
+        if ((!inMemoryWallet.balance.isEqualTo(dbWallet.balance)) ||
+            (!inMemoryWallet.voteBalance.isEqualTo(dbWallet.voteBalance)) ||
+            (dbWallet.username !== inMemoryWallet.username)) {
+          detectedInconsistency = true
+          break
+        }
+      }
+    }
+
+    // Remove dirty flags when no inconsistency has been found
+    if (!detectedInconsistency) {
+      this.walletManager.clear()
+    }
+
+    return !detectedInconsistency
   }
 }

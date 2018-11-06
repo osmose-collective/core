@@ -10,62 +10,62 @@ const createRandomTx = type => {
   let transaction
 
   switch (type) {
-    case 0: // transfer
-      transaction = builder
-        .transfer()
-        .recipientId('AMw3TiLrmVmwmFVwRzn96kkUsUpFTqsAEX')
-        .amount(1000 * Math.pow(10, 10))
-        .vendorField(Math.random().toString(36))
-        .sign(Math.random().toString(36))
-        .secondSign(Math.random().toString(36))
-        .build()
-      break
+  case 0: // transfer
+    transaction = builder
+      .transfer()
+      .recipientId('AMw3TiLrmVmwmFVwRzn96kkUsUpFTqsAEX')
+      .amount(1000 * Math.pow(10, 10))
+      .vendorField(Math.random().toString(36))
+      .sign(Math.random().toString(36))
+      .secondSign(Math.random().toString(36))
+      .build()
+    break
 
-    case 1: // second signature
-      transaction = builder
-        .secondSignature()
-        .signatureAsset(Math.random().toString(36))
-        .sign(Math.random().toString(36))
-        .build()
-      break
+  case 1: // second signature
+    transaction = builder
+      .secondSignature()
+      .signatureAsset(Math.random().toString(36))
+      .sign(Math.random().toString(36))
+      .build()
+    break
 
-    case 2: // delegate registration
-      transaction = builder
-        .delegateRegistration()
-        .usernameAsset('dummy-delegate')
-        .sign(Math.random().toString(36))
-        .build()
-      break
+  case 2: // delegate registration
+    transaction = builder
+      .delegateRegistration()
+      .usernameAsset('dummy-delegate')
+      .sign(Math.random().toString(36))
+      .build()
+    break
 
-    case 3: // vote registration
-      transaction = builder
-        .vote()
-        .votesAsset(['+036928c98ee53a1f52ed01dd87db10ffe1980eb47cd7c0a7d688321f47b5d7d760'])
-        .sign(Math.random().toString(36))
-        .build()
-      break
+  case 3: // vote registration
+    transaction = builder
+      .vote()
+      .votesAsset(['+036928c98ee53a1f52ed01dd87db10ffe1980eb47cd7c0a7d688321f47b5d7d760'])
+      .sign(Math.random().toString(36))
+      .build()
+    break
 
-    case 4: // multisignature registration
-      const passphrases = [1, 2, 3].map(() => Math.random().toString(36))
-      const publicKeys = passphrases.map(passphrase => '+' + crypto.getKeys(passphrase).publicKey)
-      const min = Math.min(1, publicKeys.length)
-      const max = Math.max(1, publicKeys.length)
-      const minSignatures = Math.floor(Math.random() * (max - min)) + min
+  case 4: // multisignature registration
+    const passphrases = [1, 2, 3].map(() => Math.random().toString(36))
+    const publicKeys = passphrases.map(passphrase => '+' + crypto.getKeys(passphrase).publicKey)
+    const min = Math.min(1, publicKeys.length)
+    const max = Math.max(1, publicKeys.length)
+    const minSignatures = Math.floor(Math.random() * (max - min)) + min
 
-      const transactionBuilder = builder
-        .multiSignature()
-        .multiSignatureAsset({
-          keysgroup: publicKeys,
-          min: minSignatures,
-          lifetime: Math.floor(Math.random() * (72 - 1)) + 1
-        })
-        .sign(Math.random().toString(36))
+    const transactionBuilder = builder
+      .multiSignature()
+      .multiSignatureAsset({
+        keysgroup: publicKeys,
+        min: minSignatures,
+        lifetime: Math.floor(Math.random() * (72 - 1)) + 1
+      })
+      .sign(Math.random().toString(36))
 
-      for (let i = 0; i < minSignatures; i++) {
-        transactionBuilder.multiSignatureSign(passphrases[i])
-      }
+    for (let i = 0; i < minSignatures; i++) {
+      transactionBuilder.multiSignatureSign(passphrases[i])
+    }
 
-      transaction = transactionBuilder.build()
+    transaction = transactionBuilder.build()
   }
 
   return transaction
@@ -75,14 +75,16 @@ describe('Models - Transaction', () => {
   beforeEach(() => configManager.setConfig(network))
 
   describe('static fromBytes', () => {
-    it('returns a new transaction', () => {
-      [0, 1, 2, 3, 4].map(type => createRandomTx(type))
-        .map(transaction => {
-          const ser = Transaction.serialize(transaction.data).toString('hex')
-          const newTransaction = Transaction.fromBytes(ser)
-          expect(newTransaction.data).toEqual(transaction.data)
-          expect(newTransaction.verified).toBeTruthy()
-        })
+    it('should verify all transactions', () => {
+      [0, 1, 2, 3, 4].map(type => createRandomTx(type)).map(transaction => {
+        const ser = Transaction.serialize(transaction.data).toString('hex')
+        const newTransaction = Transaction.fromBytes(ser)
+        expect(newTransaction.data).toEqual(transaction.data)
+        expect(newTransaction.verified).toBeTrue()
+      })
+    })
+
+    it('should create a transaction', () => {
       const hex = Transaction.serialize(transactionData).toString('hex')
       const transaction = Transaction.fromBytes(hex)
       expect(transaction).toBeInstanceOf(Transaction)
@@ -195,6 +197,6 @@ describe('Models - Transaction', () => {
   it('Signatures are verified', () => {
     [0, 1, 2, 3, 4]
       .map(type => createRandomTx(type))
-      .forEach(transaction => expect(crypto.verify(transaction)).toBeTruthy())
+      .forEach(transaction => expect(crypto.verify(transaction)).toBeTrue())
   })
 })

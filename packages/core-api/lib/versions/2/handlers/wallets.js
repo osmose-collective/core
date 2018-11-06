@@ -16,7 +16,7 @@ exports.index = {
    * @return {Hapi.Response}
    */
   async handler (request, h) {
-    const wallets = await database.wallets.findAll({...request.query, ...utils.paginate(request)})
+    const wallets = await database.wallets.findAll({ ...request.query, ...utils.paginate(request) })
 
     return utils.toPagination(request, wallets, 'wallet')
   },
@@ -39,6 +39,7 @@ exports.top = {
 
     return utils.toPagination(request, wallets, 'wallet')
   }
+  // TODO: create top schema
 }
 
 /**

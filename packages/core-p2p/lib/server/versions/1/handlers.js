@@ -60,7 +60,7 @@ exports.getHeight = {
 /**
  * @type {Object}
  */
-exports.getCommonBlock = {
+exports.getCommonBlocks = {
   /**
    * @param  {Hapi.Request} request
    * @param  {Hapi.Toolkit} h
@@ -78,11 +78,11 @@ exports.getCommonBlock = {
     const ids = request.query.ids.split(',').slice(0, 9).filter(id => id.match(/^\d+$/))
 
     try {
-      const commonBlock = await blockchain.database.getCommonBlock(ids)
+      const commonBlocks = await blockchain.database.getCommonBlocks(ids)
 
       return {
         success: true,
-        common: commonBlock.length ? commonBlock[0] : null,
+        common: commonBlocks.length ? commonBlocks[0] : null,
         lastBlockHeight: blockchain.getLastBlock().data.height
       }
     } catch (error) {
@@ -167,7 +167,7 @@ exports.postBlock = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
- async handler (request, h) {
+  async handler (request, h) {
     const blockchain = container.resolvePlugin('blockchain')
 
     try {
@@ -177,7 +177,7 @@ exports.postBlock = {
 
       const block = request.payload.block
 
-      if (blockchain.pingBlock(block)) return {success: true}
+      if (blockchain.pingBlock(block)) return { success: true }
       // already got it?
       const lastDownloadedBlock = blockchain.getLastDownloadedBlock()
 
@@ -189,7 +189,7 @@ exports.postBlock = {
       const b = new Block(block)
 
       if (!b.verification.verified) {
-        return {success: false}
+        return { success: false }
       }
 
       blockchain.pushPingBlock(b.data)
@@ -211,7 +211,7 @@ exports.postBlock = {
         }
 
         if (!peer) {
-          return {success: false}
+          return { success: false }
         }
 
         transactions = await peer.getTransactionsFromIds(block.transactionIds)
@@ -223,7 +223,7 @@ exports.postBlock = {
         logger.debug(`Found missing transactions: ${block.transactions.map(tx => tx.id)}`)
 
         if (block.transactions.length !== block.numberOfTransactions) {
-          return {success: false}
+          return { success: false }
         }
       }
       // } else return { success: false }

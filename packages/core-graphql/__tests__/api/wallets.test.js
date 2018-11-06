@@ -49,15 +49,43 @@ describe('GraphQL API { wallets }', () => {
     })
   })
 
-  describe.skip('GraphQL queries for Wallets - using orderBy, limit', () => {
+  describe('GraphQL queries for Wallets - using orderBy, limit', () => {
+    it('should get 5 wallets in order of ASCending address', async () => {
+      const query = '{ wallets(orderBy: { field: "address", direction: ASC }, limit: 5 ) { address } }'
+      const response = await utils.request(query)
 
+      expect(response).toBeSuccessfulResponse()
+
+      const data = response.data.data
+      expect(data).toBeObject()
+      expect(data.wallets.length).toBe(5)
+      expect(data.wallets.sort((a, b) => {
+        return parseInt(a) <= parseInt(b) ? -1 : 0
+      })).toEqual(data.wallets)
+    })
   })
 
-  describe.skip('GraphQL queries for Wallets - testing relationships', () => {
+  describe('GraphQL queries for Wallets - testing relationships', () => {
+    it('should verify that relationships are valid', async () => {
+      const query = '{ wallets(limit: 1) { transactions { id } } }'
+      const response = await utils.request(query)
 
+      expect(response).toBeSuccessfulResponse()
+
+      expect(response.data.errors[0]).toBeObject() // relationships doesn't function well (unimplemented)
+    })
   })
 
-  describe.skip('GraphQL queries for Wallets - testing api errors', () => {
-    // example: filter by column not defined in WalletFilter (lib/defs/inputs.js)
+  describe('GraphQL queries for Wallets - testing api errors', () => {
+    it('should not be a successful query', async () => {
+      const query = '{ wallets(filter: { vers } ) { address } }'
+      const response = await utils.request(query)
+
+      expect(response).not.toBeSuccessfulResponse()
+
+      const error = response.data.errors
+      expect(error).toBeArray()
+      expect(response.status).toEqual(400)
+    })
   })
 })

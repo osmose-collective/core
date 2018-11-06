@@ -228,8 +228,8 @@ describe('Wallet Manager', () => {
         const balance = new Bignum(100000000)
         sender.balance = balance
 
-        expect(sender.balance.toNumber()).toBe(100000000)
-        expect(recipient.balance.toNumber()).toBe(0)
+        expect(+sender.balance.toFixed()).toBe(100000000)
+        expect(+recipient.balance.toFixed()).toBe(0)
 
         await walletManager.applyTransaction(transaction)
 
@@ -241,8 +241,8 @@ describe('Wallet Manager', () => {
         const balance = Bignum.ONE
         sender.balance = balance
 
-        expect(sender.balance.toNumber()).toBe(1)
-        expect(recipient.balance.toNumber()).toBe(0)
+        expect(+sender.balance.toFixed()).toBe(1)
+        expect(+recipient.balance.toFixed()).toBe(0)
 
         try {
           expect(async () => {
@@ -251,8 +251,8 @@ describe('Wallet Manager', () => {
 
           expect(null).toBe('this should fail if no error is thrown')
         } catch (error) {
-          expect(sender.balance.toNumber()).toBe(1)
-          expect(recipient.balance.toNumber()).toBe(0)
+          expect(+sender.balance.toFixed()).toBe(1)
+          expect(+recipient.balance.toFixed()).toBe(0)
         }
       })
     })
@@ -284,7 +284,7 @@ describe('Wallet Manager', () => {
         const balance = new Bignum(30 * ARKTOSHI)
         sender.balance = balance
 
-        expect(sender.balance.toNumber()).toBe(30 * ARKTOSHI)
+        expect(+sender.balance.toFixed()).toBe(30 * ARKTOSHI)
 
         await walletManager.applyTransaction(transaction)
 
@@ -432,7 +432,7 @@ describe('Wallet Manager', () => {
     it('should be removed if all criteria are satisfied', async () => {
       const wallet = new Wallet(walletData1.address)
 
-      expect(walletManager.__canBePurged(wallet)).toBeTruthy()
+      expect(walletManager.__canBePurged(wallet)).toBeTrue()
     })
 
     it('should not be removed if wallet.secondPublicKey is set', async () => {
@@ -440,7 +440,7 @@ describe('Wallet Manager', () => {
       wallet.secondPublicKey = 'secondPublicKey'
 
       expect(wallet.secondPublicKey).toBe('secondPublicKey')
-      expect(walletManager.__canBePurged(wallet)).toBeFalsy()
+      expect(walletManager.__canBePurged(wallet)).toBeFalse()
     })
 
     it('should not be removed if wallet.multisignature is set', async () => {
@@ -448,7 +448,7 @@ describe('Wallet Manager', () => {
       wallet.multisignature = 'multisignature'
 
       expect(wallet.multisignature).toBe('multisignature')
-      expect(walletManager.__canBePurged(wallet)).toBeFalsy()
+      expect(walletManager.__canBePurged(wallet)).toBeFalse()
     })
 
     it('should not be removed if wallet.username is set', async () => {
@@ -456,7 +456,7 @@ describe('Wallet Manager', () => {
       wallet.username = 'username'
 
       expect(wallet.username).toBe('username')
-      expect(walletManager.__canBePurged(wallet)).toBeFalsy()
+      expect(walletManager.__canBePurged(wallet)).toBeFalse()
     })
   })
 
@@ -529,9 +529,9 @@ describe('Wallet Manager', () => {
     })
   })
 
-  describe('updateDelegates', () => {
+  describe('buildVoteBalances', () => {
     it('should be a function', () => {
-      expect(walletManager.updateDelegates).toBeFunction()
+      expect(walletManager.buildVoteBalances).toBeFunction()
     })
 
     it('should update vote balance of delegates', async () => {
@@ -554,7 +554,7 @@ describe('Wallet Manager', () => {
         walletManager.index([delegate, voter])
       }
 
-      walletManager.updateDelegates()
+      walletManager.buildVoteBalances()
 
       const delegates = walletManager.allByUsername()
       for (let i = 0; i < 5; i++) {

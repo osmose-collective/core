@@ -15,9 +15,10 @@ module.exports = class Client {
     this.hosts = Array.isArray(hosts) ? hosts : [hosts]
 
     this.headers = {
-      version: container.resolveOptions('blockchain').version,
-      port: container.resolveOptions('p2p').port,
-      nethash: config.network.nethash
+      'version': container.resolveOptions('blockchain').version,
+      'port': container.resolveOptions('p2p').port,
+      'nethash': config.network.nethash,
+      'x-auth': 'forger'
     }
   }
 
@@ -125,7 +126,7 @@ module.exports = class Client {
     }
 
     try {
-      await this.__post(`${host}/internal/utils/events`, {event, body})
+      await this.__post(`${host}/internal/utils/events`, { event, body })
     } catch (error) {
       logger.error(`Failed to emit "${event}" to "${host}"`)
     }
@@ -149,7 +150,7 @@ module.exports = class Client {
         await delay(wait)
       }
 
-      await this.__chooseHost()
+      await this.__chooseHost(wait)
     }
   }
 

@@ -1,8 +1,12 @@
 'use strict'
 
 require('@arkecosystem/core-test-utils/lib/matchers')
+const generateTransfers = require('@arkecosystem/core-test-utils/lib/generators/transactions/transfer')
+const generateWallets = require('@arkecosystem/core-test-utils/lib/generators/wallets')
+const delegates = require('@arkecosystem/core-test-utils/fixtures/testnet/delegates')
 const app = require('../../__support__/setup')
 const utils = require('../utils')
+const transferFee = 10000000
 
 let genesisBlock
 let genesisTransactions
@@ -203,12 +207,21 @@ describe('API 2.0 - Transactions', () => {
     ])('using the %s header', (header, request) => {
       it('should POST a search for transactions with the exact specified senderPublicKey', async () => {
         const response = await utils[request]('POST', 'transactions/search', { senderPublicKey })
+
         expect(response).toBeSuccessfulResponse()
-        expect(response.data.data).toBeArray()
 
-        expect(response.data.data).toHaveLength(51)
+        const data = response.data.data
+        expect(data).toBeArray()
 
-        // TODO rework and check the 51 transactions match the genesis transactions
+        let genesisTransactions = {}
+        genesisBlock.transactions.forEach(transaction => {
+          genesisTransactions[transaction.id] = true
+        })
+        const failed = data.some(transaction => {
+          if (!genesisTransactions[transaction.id]) return true
+        })
+
+        expect(!failed).toBeTrue()
       })
     })
 
@@ -218,12 +231,21 @@ describe('API 2.0 - Transactions', () => {
     ])('using the %s header', (header, request) => {
       it('should POST a search for transactions with the exact specified senderId', async () => {
         const response = await utils[request]('POST', 'transactions/search', { senderId: senderAddress })
+
         expect(response).toBeSuccessfulResponse()
-        expect(response.data.data).toBeArray()
 
-        expect(response.data.data).toHaveLength(51)
+        const data = response.data.data
+        expect(data).toBeArray()
 
-        // TODO rework and check the 51 transactions match the genesis transactions
+        let genesisTransactions = {}
+        genesisBlock.transactions.forEach(transaction => {
+          genesisTransactions[transaction.id] = true
+        })
+        const failed = data.some(transaction => {
+          if (!genesisTransactions[transaction.id]) return true
+        })
+
+        expect(!failed).toBeTrue()
       })
     })
 
@@ -245,147 +267,209 @@ describe('API 2.0 - Transactions', () => {
       })
     })
 
-    // TODO remove the search by id, to be sure that is OK
     describe.each([
       ['API-Version', 'request'],
       ['Accept', 'requestWithAcceptHeader']
     ])('using the %s header', (header, request) => {
       it('should POST a search for transactions with the exact specified timestamp', async () => {
         const response = await utils[request]('POST', 'transactions/search', {
-          id: transactionId,
           timestamp: {
             from: timestamp,
             to: timestamp
           }
         })
+
         expect(response).toBeSuccessfulResponse()
-        expect(response.data.data).toBeArray()
 
-        expect(response.data.data).toHaveLength(1)
+        const data = response.data.data
+        expect(data).toBeArray()
+        expect(data.length).toEqual(100)
 
-        const transaction = response.data.data[0]
-        utils.expectTransaction(transaction)
-        expect(transaction.id).toBe(transactionId)
+        data.forEach(transaction => {
+          utils.expectTransaction(transaction)
+        })
+
+        let genesisTransactions = {}
+        genesisBlock.transactions.forEach(transaction => {
+          genesisTransactions[transaction.id] = true
+        })
+        const failed = data.some(transaction => {
+          if (!genesisTransactions[transaction.id]) return true
+        })
+
+        expect(!failed).toBeTrue()
       })
     })
 
-    // TODO remove the search by id, to be sure that is OK
     describe.each([
       ['API-Version', 'request'],
       ['Accept', 'requestWithAcceptHeader']
     ])('using the %s header', (header, request) => {
       it('should POST a search for transactions with the specified timestamp range', async () => {
         const response = await utils[request]('POST', 'transactions/search', {
-          id: transactionId,
           timestamp: {
             from: timestampFrom,
             to: timestampTo
           }
         })
+
         expect(response).toBeSuccessfulResponse()
-        expect(response.data.data).toBeArray()
 
-        expect(response.data.data).toHaveLength(1)
+        const data = response.data.data
+        expect(data).toBeArray()
+        expect(data).toHaveLength(100)
 
-        const transaction = response.data.data[0]
-        utils.expectTransaction(transaction)
-        expect(transaction.id).toBe(transactionId)
+        data.forEach(transaction => {
+          utils.expectTransaction(transaction)
+        })
+
+        let genesisTransactions = {}
+        genesisBlock.transactions.forEach(transaction => {
+          genesisTransactions[transaction.id] = true
+        })
+        const failed = data.some(transaction => {
+          if (!genesisTransactions[transaction.id]) return true
+        })
+
+        expect(!failed).toBeTrue()
       })
     })
 
-    // TODO remove the search by id, to be sure that is OK
     describe.each([
       ['API-Version', 'request'],
       ['Accept', 'requestWithAcceptHeader']
     ])('using the %s header', (header, request) => {
       it('should POST a search for transactions with the exact specified amount', async () => {
         const response = await utils[request]('POST', 'transactions/search', {
-          id: transactionId,
           amount: {
             from: amount,
             to: amount
           }
         })
+
         expect(response).toBeSuccessfulResponse()
-        expect(response.data.data).toBeArray()
 
-        expect(response.data.data).toHaveLength(1)
+        const data = response.data.data
+        expect(data).toBeArray()
+        expect(data).toHaveLength(50)
 
-        const transaction = response.data.data[0]
-        utils.expectTransaction(transaction)
-        expect(transaction.id).toBe(transactionId)
+        data.forEach(transaction => {
+          utils.expectTransaction(transaction)
+        })
+
+        let genesisTransactions = {}
+        genesisBlock.transactions.forEach(transaction => {
+          genesisTransactions[transaction.id] = true
+        })
+        const failed = data.some(transaction => {
+          if (!genesisTransactions[transaction.id]) {
+            return true
+          }
+        })
+
+        expect(!failed).toBeTrue()
       })
     })
 
-    // TODO remove the search by id, to be sure that is OK
     describe.each([
       ['API-Version', 'request'],
       ['Accept', 'requestWithAcceptHeader']
     ])('using the %s header', (header, request) => {
       it('should POST a search for transactions with the specified amount range', async () => {
         const response = await utils[request]('POST', 'transactions/search', {
-          id: transactionId,
           amount: {
             from: amountFrom,
             to: amountTo
           }
         })
+
         expect(response).toBeSuccessfulResponse()
-        expect(response.data.data).toBeArray()
 
-        expect(response.data.data).toHaveLength(1)
+        const data = response.data.data
+        expect(data).toBeArray()
+        expect(data).toHaveLength(50)
 
-        const transaction = response.data.data[0]
-        utils.expectTransaction(transaction)
-        expect(transaction.id).toBe(transactionId)
+        data.forEach(transaction => {
+          utils.expectTransaction(transaction)
+        })
+
+        let genesisTransactions = {}
+        genesisBlock.transactions.forEach(transaction => {
+          genesisTransactions[transaction.id] = true
+        })
+        const failed = data.some(transaction => {
+          if (!genesisTransactions[transaction.id]) return true
+        })
+
+        expect(!failed).toBeTrue()
       })
     })
 
-    // TODO remove the search by id, to be sure that is OK
     describe.each([
       ['API-Version', 'request'],
       ['Accept', 'requestWithAcceptHeader']
     ])('using the %s header', (header, request) => {
       it('should POST a search for transactions with the exact specified fee', async () => {
         const response = await utils[request]('POST', 'transactions/search', {
-          id: transactionId,
           fee: {
             from: fee,
             to: fee
           }
         })
+
         expect(response).toBeSuccessfulResponse()
-        expect(response.data.data).toBeArray()
 
-        expect(response.data.data).toHaveLength(1)
+        const data = response.data.data
+        expect(data).toBeArray()
+        expect(data).toHaveLength(100)
 
-        const transaction = response.data.data[0]
-        utils.expectTransaction(transaction)
-        expect(transaction.id).toBe(transactionId)
+        data.forEach(transaction => {
+          utils.expectTransaction(transaction)
+        })
+
+        let genesisTransactions = {}
+        genesisBlock.transactions.forEach(transaction => {
+          genesisTransactions[transaction.id] = true
+        })
+        const failed = data.some(transaction => {
+          if (!genesisTransactions[transaction.id]) return true
+        })
+
+        expect(!failed).toBeTrue()
       })
     })
 
-    // TODO remove the search by id, to be sure that is OK
     describe.each([
       ['API-Version', 'request'],
       ['Accept', 'requestWithAcceptHeader']
     ])('using the %s header', (header, request) => {
       it('should POST a search for transactions with the specified fee range', async () => {
         const response = await utils[request]('POST', 'transactions/search', {
-          id: transactionId,
           fee: {
             from: feeFrom,
             to: feeTo
           }
         })
+
         expect(response).toBeSuccessfulResponse()
-        expect(response.data.data).toBeArray()
 
-        expect(response.data.data).toHaveLength(1)
+        const data = response.data.data
+        expect(data).toBeArray()
+        expect(data).toHaveLength(100)
 
-        const transaction = response.data.data[0]
-        utils.expectTransaction(transaction)
-        expect(transaction.id).toBe(transactionId)
+        data.forEach(transaction => {
+          utils.expectTransaction(transaction)
+        })
+
+        let genesisTransactions = {}
+        genesisBlock.transactions.forEach(transaction => {
+          genesisTransactions[transaction.id] = true
+        })
+        const failed = data.some(transaction => {
+          if (!genesisTransactions[transaction.id]) return true
+        })
+
+        expect(!failed).toBeTrue()
       })
     })
 
@@ -439,9 +523,76 @@ describe('API 2.0 - Transactions', () => {
         expect(response).toBeSuccessfulResponse()
         expect(response.data.data).toBeArray()
 
-        expect(response.data.data).toBeArray()
         utils.expectTransaction(response.data.data[0])
       })
+    })
+  })
+
+  describe('POST /transactions', () => {
+    it('should POST 2 transactions double spending and get only 1 accepted and broadcasted', async () => {
+      const amount = 245098000000000 - 5098000000000 // a bit less than the delegates' balance
+      const transactions = generateTransfers('testnet', delegates[0].secret, delegates[1].address, amount, 2, true)
+      const response = await utils.requestWithAcceptHeader('POST', 'transactions', {
+        transactions
+      })
+
+      expect(response).toBeSuccessfulResponse()
+      expect(response.data.data).toBeObject()
+
+      expect(response.data.data.accept.length).toBe(1)
+      expect(response.data.data.accept[0]).toBe(transactions[0].id)
+
+      expect(response.data.data.broadcast.length).toBe(1)
+      expect(response.data.data.broadcast[0]).toBe(transactions[0].id)
+
+      expect(response.data.data.invalid.length).toBe(1)
+      expect(response.data.data.invalid[0]).toBe(transactions[1].id)
+    })
+
+    it.each([3, 5, 8])('should accept and broadcast %i transactions emptying a wallet', async (txNumber) => {
+      const sender = delegates[txNumber] // use txNumber so that we use a different delegate for each test case
+      const receivers = generateWallets('testnet', 2)
+      const amountPlusFee = Math.floor(sender.balance / txNumber)
+      const lastAmountPlusFee = sender.balance - (txNumber - 1) * amountPlusFee
+
+      const transactions = generateTransfers('testnet', sender.secret, receivers[0].address, amountPlusFee - transferFee, txNumber - 1, true)
+      const lastTransaction = generateTransfers('testnet', sender.secret, receivers[1].address, lastAmountPlusFee - transferFee, 1, true)
+      // we change the receiver in lastTransaction to prevent having 2 exact same transactions with same id (if not, could be same as transactions[0])
+
+      const allTransactions = transactions.concat(lastTransaction)
+
+      const response = await utils.requestWithAcceptHeader('POST', 'transactions', {
+        transactions: allTransactions
+      })
+
+      expect(response).toBeSuccessfulResponse()
+
+      expect(response.data.data.accept.sort()).toEqual(allTransactions.map(transaction => transaction.id).sort())
+      expect(response.data.data.broadcast.sort()).toEqual(allTransactions.map(transaction => transaction.id).sort())
+      expect(response.data.data.invalid.length).toBe(0)
+    })
+
+    it.each([3, 5, 8])('should not accept the last of %i transactions emptying a wallet when the last one is 1 arktoshi too much', async (txNumber) => {
+      const sender = delegates[txNumber + 1] // use txNumber + 1 so that we don't use the same delegates as the above test
+      const receivers = generateWallets('testnet', 2)
+      const amountPlusFee = Math.floor(sender.balance / txNumber)
+      const lastAmountPlusFee = sender.balance - (txNumber - 1) * amountPlusFee + 1
+
+      const transactions = generateTransfers('testnet', sender.secret, receivers[0].address, amountPlusFee - transferFee, txNumber - 1, true)
+      const lastTransaction = generateTransfers('testnet', sender.secret, receivers[1].address, lastAmountPlusFee - transferFee, 1, true)
+      // we change the receiver in lastTransaction to prevent having 2 exact same transactions with same id (if not, could be same as transactions[0])
+
+      const allTransactions = transactions.concat(lastTransaction)
+
+      const response = await utils.requestWithAcceptHeader('POST', 'transactions', {
+        transactions: allTransactions
+      })
+
+      expect(response).toBeSuccessfulResponse()
+
+      expect(response.data.data.accept.sort()).toEqual(transactions.map(transaction => transaction.id).sort())
+      expect(response.data.data.broadcast.sort()).toEqual(transactions.map(transaction => transaction.id).sort())
+      expect(response.data.data.invalid).toEqual(lastTransaction.map(transaction => transaction.id))
     })
   })
 })

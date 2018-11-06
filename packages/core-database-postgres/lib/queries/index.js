@@ -4,18 +4,16 @@ module.exports = {
   blocks: {
     common: loadQueryFile(__dirname, './blocks/common.sql'),
     count: loadQueryFile(__dirname, './blocks/count.sql'),
+    delete: loadQueryFile(__dirname, './blocks/delete.sql'),
     findById: loadQueryFile(__dirname, './blocks/find-by-id.sql'),
     headers: loadQueryFile(__dirname, './blocks/headers.sql'),
     heightRange: loadQueryFile(__dirname, './blocks/height-range.sql'),
     latest: loadQueryFile(__dirname, './blocks/latest.sql'),
     recent: loadQueryFile(__dirname, './blocks/recent.sql'),
     statistics: loadQueryFile(__dirname, './blocks/statistics.sql'),
-    delete: loadQueryFile(__dirname, './blocks/delete.sql')
+    top: loadQueryFile(__dirname, './blocks/top.sql')
   },
   rounds: {
-    delegates: loadQueryFile(__dirname, './rounds/delegates.sql'),
-    placeholders: loadQueryFile(__dirname, './rounds/placeholders.sql'),
-    placeholdersWithout: loadQueryFile(__dirname, './rounds/placeholders-without.sql'),
     delete: loadQueryFile(__dirname, './rounds/delete.sql'),
     find: loadQueryFile(__dirname, './rounds/find.sql')
   },
@@ -43,6 +41,8 @@ module.exports = {
   },
   wallets: {
     all: loadQueryFile(__dirname, './wallets/all.sql'),
-    findByAddress: loadQueryFile(__dirname, './wallets/find-by-address.sql')
+    findByAddress: loadQueryFile(__dirname, './wallets/find-by-address.sql'),
+    findNegativeBalances: loadQueryFile(__dirname, './wallets/find-negative-balances.sql'),
+    findNegativeVoteBalances: loadQueryFile(__dirname, './wallets/find-negative-vote-balances.sql')
   }
 }

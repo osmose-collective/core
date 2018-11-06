@@ -48,7 +48,7 @@ class BlocksRepository extends Repository {
    * @return {Object}
    */
   async findAllByGenerator (generatorPublicKey, paginator) {
-    return this.findAll({...{ generatorPublicKey }, ...paginator})
+    return this.findAll({ ...{ generatorPublicKey }, ...paginator })
   }
 
   /**
@@ -76,7 +76,7 @@ class BlocksRepository extends Repository {
       .select(this.query.id, this.query.timestamp)
       .from(this.query)
       .where(this.query.generator_public_key.equals(generatorPublicKey))
-      .order(this.query.created_at.desc)
+      .order(this.query.height.desc)
 
     return this._find(query)
   }
@@ -124,7 +124,7 @@ class BlocksRepository extends Repository {
 
   __orderBy (parameters) {
     return parameters.orderBy
-      ? parameters.orderBy.split(':')
+      ? parameters.orderBy.split(':').map(p => p.toLowerCase())
       : ['height', 'desc']
   }
 }

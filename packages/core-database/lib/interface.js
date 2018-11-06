@@ -8,6 +8,9 @@ const emitter = container.resolvePlugin('event-emitter')
 const WalletManager = require('./wallet-manager')
 const { Block } = require('@arkecosystem/crypto').models
 const { TRANSACTION_TYPES } = require('@arkecosystem/crypto').constants
+const { roundCalculator } = require('@arkecosystem/core-utils')
+const cloneDeep = require('lodash/cloneDeep')
+const assert = require('assert')
 
 module.exports = class ConnectionInterface {
   /**
@@ -65,28 +68,18 @@ module.exports = class ConnectionInterface {
   /**
    * Get the top 51 delegates.
    * @param  {Number} height
+   * @param  {Array} delegates
    * @return {void}
    * @throws Error
    */
-  async getActiveDelegates (height) {
+  async getActiveDelegates (height, delegates) {
     throw new Error('Method [getActiveDelegates] not implemented!')
-  }
-
-  /**
-   * Load a list of delegates into memory.
-   * @param  {Number} maxDelegates
-   * @param  {Number} height
-   * @return {void}
-   * @throws Error
-   */
-  async buildDelegates (maxDelegates, height) {
-    throw new Error('Method [buildDelegates] not implemented!')
   }
 
   /**
    * Load a list of wallets into memory.
    * @param  {Number} height
-   * @return {void}
+   * @return {Boolean} success
    * @throws Error
    */
   async buildWallets (height) {
@@ -115,45 +108,47 @@ module.exports = class ConnectionInterface {
   }
 
   /**
-   * Save the given number of block (async version) in the memory Must call saveBlockCommit() to save to database.
-   * NOTE: to use when rebuilding to decrease the number of database transactions, and commit blocks (save only every 1000s for instance) using saveBlockCommit
+   * Queue a query to save the given block.
+   * NOTE: Must call commitQueuedQueries() to save to database.
+   * NOTE: to use when rebuilding to decrease the number of database transactions, and commit blocks (save only every 1000s for instance) by calling commit
    * @param  {Block} block
    * @return {void}
    * @throws Error
    */
-  async enqueueSaveBlockAsync (block) {
-    throw new Error('Method [enqueueSaveBlockAsync] not implemented!')
+  enqueueSaveBlock (block) {
+    throw new Error('Method [enqueueSaveBlock] not implemented!')
   }
 
   /**
-   * Commit the block save database transaction.
-   * NOTE: to be used in combination with enqueueSaveBlockAsync
-   * @return {void}
-   * @throws Error
-   */
-  async saveBlockCommit () {
-    throw new Error('Method [saveBlockCommit] not implemented!')
-  }
-
-  /**
-   * Delete the given block (async version).
-   * NOTE: to use when rebuilding to decrease the number of database transactions, and commit blocks (save only every 1000s for instance) using saveBlockCommit
+   * Queue a query to delete the given block.
+   * See also enqueueSaveBlock
    * @param  {Block} block
    * @return {void}
    * @throws Error
    */
-  async deleteBlockAsync (block) {
-    throw new Error('Method [deleteBlockAsync] not implemented!')
+  enqueueDeleteBlock (block) {
+    throw new Error('Method [enqueueDeleteBlock] not implemented!')
   }
 
   /**
-   * Commit the block delete database transaction.
-   * NOTE: to be used in combination with deleteBlockAsync
+   * Queue a query to delete the round at given height.
+   * See also enqueueSaveBlock and enqueueDeleteBlock
+   * @param  {Number} height
    * @return {void}
    * @throws Error
    */
-  async deleteBlockCommit () {
-    throw new Error('Method [deleteBlockCommit] not implemented!')
+  enqueueDeleteRound (height) {
+    throw new Error('Method [enqueueDeleteRound] not implemented!')
+  }
+
+  /**
+   * Commit all queued queries to the database.
+   * NOTE: to be used in combination with other enqueue-functions.
+   * @return {void}
+   * @throws Error
+   */
+  async commitQueuedQueries () {
+    throw new Error('Method [commitQueuedQueries] not implemented!')
   }
 
   /**
@@ -197,6 +192,17 @@ module.exports = class ConnectionInterface {
   }
 
   /**
+   * Get top count blocks ordered by height DESC.
+   * NOTE: Only used when trying to restore database integrity. The returned blocks may be unchained.
+   * @param  {Number} count
+   * @return {void}
+   * @throws Error
+   */
+  async getTopBlocks (count) {
+    throw new Error('Method [getTopBlocks] not implemented!')
+  }
+
+  /**
    * Get recent block ids.
    * @return {[]String}
    */
@@ -210,7 +216,7 @@ module.exports = class ConnectionInterface {
    * @return {void}
    * @throws Error
    */
-  saveRound (activeDelegates) {
+  async saveRound (activeDelegates) {
     throw new Error('Method [saveRound] not implemented!')
   }
 
@@ -220,7 +226,7 @@ module.exports = class ConnectionInterface {
    * @return {void}
    * @throws Error
    */
-  deleteRound (round) {
+  async deleteRound (round) {
     throw new Error('Method [deleteRound] not implemented!')
   }
 
@@ -258,27 +264,6 @@ module.exports = class ConnectionInterface {
   }
 
   /**
-   * Detect if height is the beginning of a new round.
-   * @param  {Number} height
-   * @return {boolean} true if new round, false if not
-   */
-  isNewRound (height) {
-    const maxDelegates = config.getConstants(height).activeDelegates
-
-    return height % maxDelegates === 1
-  }
-
-  getRound (height) {
-    const maxDelegates = config.getConstants(height).activeDelegates
-
-    if (height < maxDelegates + 1) {
-      return 1
-    }
-
-    return Math.floor((height - 1) / maxDelegates) + 1
-  }
-
-  /**
    * Apply the round.
    * Note that the round is applied and the end of the round (so checking height + 1)
    * so the next block to apply starting the new round will be ready to be validated
@@ -292,21 +277,19 @@ module.exports = class ConnectionInterface {
     if (nextHeight % maxDelegates === 1) {
       const round = Math.floor((nextHeight - 1) / maxDelegates) + 1
 
-      if (!this.activeDelegates || this.activeDelegates.length === 0 || (this.activeDelegates.length && this.activeDelegates[0].round !== round)) {
+      if (!this.forgingDelegates || this.forgingDelegates.length === 0 || (this.forgingDelegates.length && this.forgingDelegates[0].round !== round)) {
         logger.info(`Starting Round ${round} :dove_of_peace:`)
 
         try {
-          this.walletManager.updateDelegates()
-          this.updateDelegateStats(height, this.activeDelegates)
-          await this.saveWallets(false) // save only modified wallets during the last round
-          const delegates = await this.buildDelegates(maxDelegates, nextHeight) // active build delegate list from database state
-          await this.saveRound(delegates) // save next round delegate list
-          await this.getActiveDelegates(nextHeight) // generate the new active delegates list
-
+          this.updateDelegateStats(height, this.forgingDelegates)
+          this.saveWallets(false) // save only modified wallets during the last round
+          const delegates = this.walletManager.loadActiveDelegateList(maxDelegates, nextHeight) // get active delegate list from in-memory wallet manager
+          this.saveRound(delegates) // save next round delegate list non-blocking
+          this.forgingDelegates = await this.getActiveDelegates(nextHeight, delegates) // generate the new active delegates list
           this.blocksInCurrentRound.length = 0
         } catch (error) {
           // trying to leave database state has it was
-          this.deleteRound(round)
+          await this.deleteRound(round)
           throw error
         }
       } else {
@@ -321,21 +304,52 @@ module.exports = class ConnectionInterface {
    * @return {void}
    */
   async revertRound (height) {
-    const maxDelegates = config.getConstants(height).activeDelegates
-    const nextHeight = height + 1
-
-    const round = Math.floor((height - 1) / maxDelegates) + 1
-    const nextRound = Math.floor((nextHeight - 1) / config.getConstants(nextHeight).activeDelegates) + 1
+    const { round, nextRound, maxDelegates } = roundCalculator.calculateRound(height)
 
     if (nextRound === round + 1 && height >= maxDelegates) {
       logger.info(`Back to previous round: ${round} :back:`)
 
-      this.blocksInCurrentRound = await this.__getBlocksForRound(round)
-
-      this.activedelegates = await this.getActiveDelegates(height)
+      const delegates = await this.__calcPreviousActiveDelegates(round)
+      this.forgingDelegates = await this.getActiveDelegates(height, delegates)
 
       await this.deleteRound(nextRound)
     }
+  }
+
+  /**
+   * Calculate the active delegates of the previous round. In order to do
+   * so we need to go back to the start of that round. Therefore we create
+   * a temporary wallet manager with all delegates and revert all blocks
+   * and transactions of that round to get the initial vote balances
+   * which are then used to restore the original order.
+   * @param {Number} round
+   */
+  async __calcPreviousActiveDelegates (round) {
+    // TODO: cache the blocks of the last X rounds
+    this.blocksInCurrentRound = await this.__getBlocksForRound(round)
+
+    // Create temp wallet manager from all delegates
+    const tempWalletManager = new WalletManager()
+    tempWalletManager.index(cloneDeep(this.walletManager.allByUsername()))
+
+    // Revert all blocks in reverse order
+    let height = 0
+    for (let i = this.blocksInCurrentRound.length - 1; i >= 0; i--) {
+      tempWalletManager.revertBlock(this.blocksInCurrentRound[i])
+      height = this.blocksInCurrentRound[i].data.height
+    }
+
+    // The first round has no active delegates
+    if (height === 1) {
+      return []
+    }
+
+    // Assert that the height is the beginning of a round.
+    const { maxDelegates } = roundCalculator.calculateRound(height)
+    assert(height > 1 && height % maxDelegates === 1)
+
+    // Now retrieve the active delegate list from the temporary wallet manager.
+    return tempWalletManager.loadActiveDelegateList(maxDelegates, height)
   }
 
   /**
@@ -344,6 +358,10 @@ module.exports = class ConnectionInterface {
    * @return {void}
    */
   async validateDelegate (block) {
+    if (this.__isException(block.data)) {
+      return true
+    }
+
     const delegates = await this.getActiveDelegates(block.data.height)
     const slot = slots.getSlotNumber(block.data.timestamp)
     const forgingDelegate = delegates[slot % delegates.length]
@@ -398,23 +416,23 @@ module.exports = class ConnectionInterface {
   __emitTransactionEvents (transaction) {
     emitter.emit('transaction.applied', transaction.data)
 
-     if (transaction.type === TRANSACTION_TYPES.DELEGATE_REGISTRATION) {
+    if (transaction.type === TRANSACTION_TYPES.DELEGATE_REGISTRATION) {
       emitter.emit('delegate.registered', transaction.data)
-     }
+    }
 
-     if (transaction.type === TRANSACTION_TYPES.DELEGATE_RESIGNATION) {
+    if (transaction.type === TRANSACTION_TYPES.DELEGATE_RESIGNATION) {
       emitter.emit('delegate.resigned', transaction.data)
-     }
+    }
 
-     if (transaction.type === TRANSACTION_TYPES.VOTE) {
-       const vote = transaction.asset.votes[0]
+    if (transaction.type === TRANSACTION_TYPES.VOTE) {
+      const vote = transaction.asset.votes[0]
 
-       emitter.emit(vote.startsWith('+') ? 'wallet.vote' : 'wallet.unvote', {
-         delegate: vote,
-         transaction: transaction.data
-       })
-     }
-   }
+      emitter.emit(vote.startsWith('+') ? 'wallet.vote' : 'wallet.unvote', {
+        delegate: vote,
+        transaction: transaction.data
+      })
+    }
+  }
 
   /**
    * Remove the given block.
@@ -464,14 +482,20 @@ module.exports = class ConnectionInterface {
    * @return {[]Block}
    */
   async __getBlocksForRound (round) {
-    const lastBlock = await this.getLastBlock()
+    let lastBlock
+    if (container.has('state')) {
+      lastBlock = container.resolve('state').getLastBlock()
+    } else {
+      lastBlock = await this.getLastBlock()
+    }
+
     if (!lastBlock) {
       return []
     }
 
     let height = +lastBlock.data.height
     if (!round) {
-      round = this.getRound(height)
+      round = roundCalculator.calculateRound(height).round
     }
 
     const maxDelegates = config.getConstants(height).activeDelegates
@@ -507,5 +531,22 @@ module.exports = class ConnectionInterface {
   async _registerRepositories () {
     this['wallets'] = new (require('./repositories/wallets'))(this)
     this['delegates'] = new (require('./repositories/delegates'))(this)
+  }
+
+  /**
+   * Determine if the given block is an exception.
+   * @param  {Object} block
+   * @return {Boolean}
+   */
+  __isException (block) {
+    if (!config) {
+      return false
+    }
+
+    if (!Array.isArray(config.network.exceptions.blocks)) {
+      return false
+    }
+
+    return config.network.exceptions.blocks.includes(block.id)
   }
 }

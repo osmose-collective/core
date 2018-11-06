@@ -1,13 +1,16 @@
-# ARK Core
+# Ark Core
 
-![ARK Core](./banner.png)
+<p align="center">
+    <img src="./banner.png" />
+</p>
 
-[![Build Status](https://badgen.now.sh/travis/ArkEcosystem/core/master)](https://travis-ci.org/ArkEcosystem/core)
+[![Build Status](https://badgen.now.sh/circleci/github/ArkEcosystem/core)](https://circleci.com/gh/ArkEcosystem/core)
+[![Codecov](https://badgen.now.sh/codecov/c/github/arkecosystem/core)](https://codecov.io/gh/arkecosystem/core)
 [![License: MIT](https://badgen.now.sh/badge/license/MIT/green)](https://opensource.org/licenses/MIT)
 
 ## Introduction
 
-This repository contains all plugins that make up the ARK Core.
+This repository contains all plugins that make up the Ark Core.
 
 ## Documentation
 
@@ -21,14 +24,13 @@ This repository contains all plugins that make up the ARK Core.
 
 ## GitHub Development Bounty
 
-- Get involved with ARK development and earn ARK coins : https://bounty.ark.io
+- Get involved with Ark development and start earning ARK : https://bounty.ark.io
 
 ## Core Packages
 
 | Package | Version | Description
 |---|---|---|
 | **[core](/packages/core)** | [![npm](https://img.shields.io/npm/v/@arkecosystem/core.svg)](https://www.npmjs.com/package/@arkecosystem/core) | **Includes all packages** |
-| [client](/packages/client) | [![npm](https://img.shields.io/npm/v/@arkecosystem/client.svg)](https://www.npmjs.com/package/@arkecosystem/client) | A JavaScript library to interact with the ARK Blockchain |
 | [core-api](/packages/core-api) | [![npm](https://img.shields.io/npm/v/@arkecosystem/core-api.svg)](https://www.npmjs.com/package/@arkecosystem/core-api) | Public API |
 | [core-blockchain](/packages/core-blockchain) |  [![npm](https://img.shields.io/npm/v/@arkecosystem/core-blockchain.svg)](https://www.npmjs.com/package/@arkecosystem/core-blockchain) | Blockchain Management |
 | [core-config](/packages/core-config) | [![npm](https://img.shields.io/npm/v/@arkecosystem/core-config.svg)](https://www.npmjs.com/package/@arkecosystem/core-config) | Configuration Loader |
@@ -45,7 +47,6 @@ This repository contains all plugins that make up the ARK Core.
 | [test-utils](/packages/core-test-utils) | [![npm](https://img.shields.io/npm/v/@arkecosystem/core-test-utils.svg)](https://www.npmjs.com/package/@arkecosystem/core-test-utils) | Test Utilities |
 | [tester-cli](/packages/core-tester-cli) | [![npm](https://img.shields.io/npm/v/@arkecosystem/core-tester-cli.svg)](https://www.npmjs.com/package/@arkecosystem/core-tester-cli) | Tester CLI |
 | [core-transaction-pool](/packages/core-transaction-pool) | [![npm](https://img.shields.io/npm/v/@arkecosystem/core-transaction-pool.svg)](https://www.npmjs.com/package/@arkecosystem/core-transaction-pool) | Transaction Pool Interface |
-| [core-transaction-pool-redis](/packages/core-transaction-pool-redis) | [![npm](https://img.shields.io/npm/v/@arkecosystem/core-transaction-pool-redis.svg)](https://www.npmjs.com/package/@arkecosystem/core-transaction-pool-redis) | Transaction Pool - Redis Implementation |
 | [core-webhooks](/packages/core-webhooks) | [![npm](https://img.shields.io/npm/v/@arkecosystem/core-webhooks.svg)](https://www.npmjs.com/package/@arkecosystem/core-webhooks) | Webhooks Manager |
 | [crypto](/packages/crypto) | [![npm](https://img.shields.io/npm/v/@arkecosystem/crypto.svg)](https://www.npmjs.com/package/@arkecosystem/crypto) | Crypto Utilities |
 

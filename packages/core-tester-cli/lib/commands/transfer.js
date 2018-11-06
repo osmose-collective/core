@@ -13,7 +13,7 @@ module.exports = class TransferCommand extends Command {
    * @return {void}
    */
   async run (options) {
-    this.options = {...this.options, ...options}
+    this.options = { ...this.options, ...options }
 
     const primaryAddress = crypto.getAddress(crypto.getKeys(this.config.passphrase).publicKey, this.config.network.version)
 
@@ -27,11 +27,11 @@ module.exports = class TransferCommand extends Command {
     const walletBalance = await this.getWalletBalance(primaryAddress)
 
     if (!this.options.skipValidation) {
-      logger.info(`Sender starting balance: ${walletBalance}`)
+      logger.info(`Sender starting balance: ${Command.__arktoshiToArk(walletBalance)}`)
     }
 
     let totalDeductions = Bignum.ZERO
-    let transactionAmount = new Bignum(this.options.amount || Command.__arkToArktoshi(2))
+    let transactionAmount = Command.__arkToArktoshi(this.options.amount || 2)
 
     const transactions = this.generateTransactions(transactionAmount, wallets, null, true)
     for (const transaction of transactions) {
@@ -45,7 +45,7 @@ module.exports = class TransferCommand extends Command {
 
     const expectedSenderBalance = (new Bignum(walletBalance)).minus(totalDeductions)
     if (!this.options.skipValidation) {
-      logger.info(`Sender expected ending balance: ${expectedSenderBalance}`)
+      logger.info(`Sender expected ending balance: ${Command.__arktoshiToArk(expectedSenderBalance)}`)
     }
 
     const runOptions = {
@@ -84,7 +84,7 @@ module.exports = class TransferCommand extends Command {
 
   /**
    * Generate batch of transactions based on wallets.
-   * @param  {Number}  transactionAmount
+   * @param  {Bignum}  transactionAmount
    * @param  {Object[]}  wallets
    * @param  {Object[]}  [approvalWallets=[]]
    * @param  {Boolean}  [overridePassphrase=false]
@@ -126,7 +126,7 @@ module.exports = class TransferCommand extends Command {
       transactions.push(transaction)
 
       if (log) {
-        logger.info(`${i} ==> ${transaction.id}, ${transaction.recipientId} (fee: ${transaction.fee})`)
+        logger.info(`${i} ==> ${transaction.id}, ${transaction.recipientId} (fee: ${Command.__arktoshiToArk(transaction.fee)})`)
       }
     })
 
@@ -231,7 +231,7 @@ module.exports = class TransferCommand extends Command {
       const walletBalance = await this.getWalletBalance(runOptions.primaryAddress)
       if (!walletBalance.isEqualTo(runOptions.expectedSenderBalance)) {
         successfulTest = false
-        logger.error(`Sender balance incorrect: '${walletBalance}' but should be '${runOptions.expectedSenderBalance}'`)
+        logger.error(`Sender balance incorrect: '${Command.__arktoshiToArk(walletBalance)}' but should be '${Command.__arktoshiToArk(runOptions.expectedSenderBalance)}'`)
       }
     }
 
@@ -239,7 +239,7 @@ module.exports = class TransferCommand extends Command {
       const balance = await this.getWalletBalance(wallet.address)
       if (!balance.isEqualTo(runOptions.transactionAmount)) {
         successfulTest = false
-        logger.error(`Incorrect destination balance for ${wallet.address}. Should be '${runOptions.transactionAmount}' but is '${balance}'`)
+        logger.error(`Incorrect destination balance for ${wallet.address}. Should be '${Command.__arktoshiToArk(runOptions.transactionAmount)}' but is '${Command.__arktoshiToArk(balance)}'`)
       }
     }
 
@@ -254,7 +254,7 @@ module.exports = class TransferCommand extends Command {
   async __testVendorField (wallets) {
     logger.info('Testing VendorField value is set correctly')
 
-    const transactions = this.generateTransactions(2, wallets, null, null, 'Testing VendorField')
+    const transactions = this.generateTransactions(Command.__arkToArktoshi(2), wallets, null, null, 'Testing VendorField')
 
     try {
       await this.sendTransactions(transactions)
@@ -281,7 +281,7 @@ module.exports = class TransferCommand extends Command {
   async __testEmptyVendorField (wallets) {
     logger.info('Testing empty VendorField value')
 
-    const transactions = this.generateTransactions(2, wallets, null, null, null)
+    const transactions = this.generateTransactions(Command.__arkToArktoshi(2), wallets, null, null, null)
 
     try {
       await this.sendTransactions(transactions)

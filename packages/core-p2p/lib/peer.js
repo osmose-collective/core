@@ -63,11 +63,11 @@ module.exports = class Peer {
    */
   async postTransactions (transactions) {
     return this.__post(`${this.url}/peer/transactions`, {
-        transactions,
-        isBroadCasted: true
-      }, {
-        headers: this.headers,
-        timeout: 8000
+      transactions,
+      isBroadCasted: true
+    }, {
+      headers: this.headers,
+      timeout: 8000
     })
   }
 
@@ -228,7 +228,10 @@ module.exports = class Peer {
     ;['nethash', 'os', 'version'].forEach(key => (this[key] = response.headers[key] || this[key]))
 
     if (response.headers.height) {
-      this.state.height = response.headers.height
+      const previousHeight = this.state.height
+      this.state.height = +response.headers.height
+      // Work around circular dependency
+      require('./monitor').updatePeerHeight(this, previousHeight)
     }
 
     this.status = response.status
@@ -237,6 +240,6 @@ module.exports = class Peer {
   }
 
   static isOk (peer) {
-    return peer.status === 200
+    return peer.status === 200 || peer.status === 'OK'
   }
 }
