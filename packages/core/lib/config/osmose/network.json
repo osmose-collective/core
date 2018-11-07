@@ -12,7 +12,7 @@
   "client": {
     "token": "OSMOSE",
     "symbol": "OSM",
-    "explorer": "http://69.162.121.103:4200"
+    "explorer": "http://51.15.88.55:4200"
   },
   "constants": [
     {
