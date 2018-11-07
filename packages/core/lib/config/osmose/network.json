@@ -6,12 +6,13 @@
     "private": 46089520
   },
   "pubKeyHash": 115,
-  "nethash": "7dfc04c23439e98eb504454bb3c9e08da7f223e3d7c280ad677b40e521dda513",
-  "wif": 44,
+  "nethash": "309da8ed14e3038e0ed1a938a206da9d13879e466f89b5902a8d35183270b4f3",
+  "wif": 66,
+  "aip20": 0,
   "client": {
     "token": "OSMOSE",
     "symbol": "OSM",
-    "explorer": "http://v2.explorer.osmose.world:4200"
+    "explorer": "http://69.162.121.103:4200"
   },
   "constants": [
     {
@@ -25,10 +26,10 @@
       "activeDelegates": 51,
       "fees": {
         "dynamic": false,
-        "transfer": 100000000,
-        "secondSignature": 10000000000,
-        "delegateRegistration": 400000000000,
-        "vote": 1000000000,
+        "transfer": 10000000,
+        "secondSignature": 100000000,
+        "delegateRegistration": 500000000,
+        "vote": 5000000000,
         "multiSignature": 500000000,
         "ipfs": 0,
         "timelockTransfer": 0,
@@ -47,7 +48,7 @@
         "delegateResignation": 500
       },
       "height": 1,
-      "reward": 200000000000
+      "reward": 50000000
     }
   ],
   "exceptions": {},
@@ -88,5 +89,8 @@
     "5059382813585250340": "1000082813585250340",
     "7091362542116598855": "1000062542116598855",
     "8225244493039935740": "1000044493039935740"
+  },
+  "transactionIdFixTable": {
+    "ca764c01dd78f93393b02f7f6c4f0c12ed8e7ca26d3098e91d6e461a238a6b33": "80d75c7b90288246199e4a97ba726bad6639595ef92ad7c2bd14fd31563241ab"
   }
 }
