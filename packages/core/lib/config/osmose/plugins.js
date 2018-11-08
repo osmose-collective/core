@@ -49,7 +49,7 @@ module.exports = {
   },
   '@arkecosystem/core-p2p': {
     host: '0.0.0.0',
-    port: 4001,
+    port: 4000,
     whitelist: ['127.0.0.1', '::ffff:127.0.0.1', '192.168.*']
   },
   '@arkecosystem/core-blockchain': {
@@ -83,7 +83,7 @@ module.exports = {
     graphiql: true
   },
   '@arkecosystem/core-forger': {
-    hosts: ['http://127.0.0.1:4001']
+    hosts: ['http://127.0.0.1:4000']
   },
   '@arkecosystem/core-json-rpc': {
     enabled: process.env.ARK_JSON_RPC_ENABLED,
