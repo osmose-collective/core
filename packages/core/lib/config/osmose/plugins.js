@@ -48,8 +48,8 @@ module.exports = {
     maxTransactionAge: 21600
   },
   '@arkecosystem/core-p2p': {
-    host: process.env.ARK_P2P_HOST || '0.0.0.0',
-    port: process.env.ARK_P2P_PORT || 4001,
+    host: '0.0.0.0',
+    port: 4001,
     whitelist: ['127.0.0.1', '::ffff:127.0.0.1', '192.168.*']
   },
   '@arkecosystem/core-blockchain': {
@@ -83,7 +83,7 @@ module.exports = {
     graphiql: true
   },
   '@arkecosystem/core-forger': {
-    hosts: ['http://127.0.0.1:4000']
+    hosts: ['http://127.0.0.1:4001']
   },
   '@arkecosystem/core-json-rpc': {
     enabled: process.env.ARK_JSON_RPC_ENABLED,
