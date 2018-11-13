@@ -1,7 +1,5 @@
-'use strict'
-
-const app = require('./__support__/setup')
 const moment = require('moment')
+const app = require('./__support__/setup')
 
 let poolInterface
 
@@ -33,7 +31,9 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', () => {
-      expect(poolInterface.getPoolSize).toThrowError('Method [getPoolSize] not implemented!')
+      expect(poolInterface.getPoolSize).toThrow(
+        'Method [getPoolSize] not implemented!',
+      )
     })
   })
 
@@ -43,7 +43,9 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', async () => {
-      expect(poolInterface.getSenderSize).toThrowError('Method [getSenderSize] not implemented!')
+      expect(poolInterface.getSenderSize).toThrow(
+        'Method [getSenderSize] not implemented!',
+      )
     })
   })
 
@@ -53,7 +55,9 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', async () => {
-      expect(poolInterface.addTransaction).toThrowError('Method [addTransaction] not implemented!')
+      expect(poolInterface.addTransaction).toThrow(
+        'Method [addTransaction] not implemented!',
+      )
     })
   })
 
@@ -63,7 +67,9 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', async () => {
-      expect(poolInterface.removeTransaction).toThrowError('Method [removeTransaction] not implemented!')
+      expect(poolInterface.removeTransaction).toThrow(
+        'Method [removeTransaction] not implemented!',
+      )
     })
   })
 
@@ -73,7 +79,9 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', async () => {
-      expect(poolInterface.getTransaction).toThrowError('Method [getTransaction] not implemented!')
+      expect(poolInterface.getTransaction).toThrow(
+        'Method [getTransaction] not implemented!',
+      )
     })
   })
 
@@ -83,7 +91,9 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', async () => {
-      expect(poolInterface.getTransactions).toThrowError('Method [getTransactions] not implemented!')
+      expect(poolInterface.getTransactions).toThrow(
+        'Method [getTransactions] not implemented!',
+      )
     })
   })
 
@@ -93,7 +103,11 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', async () => {
-      await expect(poolInterface.getTransactionsForForging()).rejects.toThrowError('Method [getTransactionsForForging] not implemented!')
+      await expect(
+        poolInterface.getTransactionsForForging(),
+      ).rejects.toThrowError(
+        'Method [getTransactionsForForging] not implemented!',
+      )
     })
   })
 
@@ -103,7 +117,11 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', async () => {
-      await expect(poolInterface.getTransactionIdsForForging()).rejects.toThrowError('Method [getTransactionIdsForForging] not implemented!')
+      await expect(
+        poolInterface.getTransactionIdsForForging(),
+      ).rejects.toThrowError(
+        'Method [getTransactionIdsForForging] not implemented!',
+      )
     })
   })
 
@@ -113,17 +131,21 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', async () => {
-      expect(poolInterface.hasExceededMaxTransactions).toThrowError('Method [hasExceededMaxTransactions] not implemented!')
+      expect(poolInterface.hasExceededMaxTransactions).toThrow(
+        'Method [hasExceededMaxTransactions] not implemented!',
+      )
     })
   })
 
-  describe('checkIfSenderHasVoteTransactions', () => {
+  describe('senderHasTransactionsOfType', () => {
     it('should be a function', () => {
-      expect(poolInterface.checkIfSenderHasVoteTransactions).toBeFunction()
+      expect(poolInterface.senderHasTransactionsOfType).toBeFunction()
     })
 
     it('should throw an exception', async () => {
-      expect(poolInterface.checkIfSenderHasVoteTransactions).toThrowError('Method [checkIfSenderHasVoteTransactions] not implemented!')
+      expect(poolInterface.senderHasTransactionsOfType).toThrow(
+        'Method [senderHasTransactionsOfType] not implemented!',
+      )
     })
   })
 
@@ -133,7 +155,9 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', async () => {
-      expect(poolInterface.transactionExists).toThrowError('Method [transactionExists] not implemented!')
+      expect(poolInterface.transactionExists).toThrow(
+        'Method [transactionExists] not implemented!',
+      )
     })
   })
 
@@ -143,7 +167,9 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should throw an exception', async () => {
-      expect(poolInterface.removeTransactionsForSender).toThrowError('Method [removeTransactionsForSender] not implemented!')
+      expect(poolInterface.removeTransactionsForSender).toThrow(
+        'Method [removeTransactionsForSender] not implemented!',
+      )
     })
   })
 
@@ -174,12 +200,6 @@ describe('Transaction Pool Interface', () => {
 
       expect(poolInterface.isSenderBlocked('keykeykey')).toBeTrue()
       expect(parseInt(duration.asHours())).toEqual(1)
-    })
-  })
-
-  describe('getTransactionsForForging', () => {
-    it('should be a function', () => {
-      expect(poolInterface.getTransactionsForForging).toBeFunction()
     })
   })
 

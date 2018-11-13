@@ -1,15 +1,15 @@
-'use strict'
-
 const delay = require('delay')
 
 const container = require('@arkecosystem/core-container')
+
 const logger = container.resolvePlugin('logger')
 const config = container.resolvePlugin('config')
 
 const { slots } = require('@arkecosystem/crypto')
 const { Delegate, Transaction } = require('@arkecosystem/crypto').models
 
-const isEmpty = require('lodash/isEmpty')
+const { isEmpty, uniq } = require('lodash')
+const pluralize = require('pluralize')
 
 const Client = require('./client')
 
@@ -18,7 +18,7 @@ module.exports = class ForgerManager {
    * Create a new forger manager instance.
    * @param  {Object} options
    */
-  constructor (options) {
+  constructor(options) {
     this.secrets = config.delegates ? config.delegates.secrets : null
     this.network = config.network
     this.client = new Client(options.hosts)
@@ -30,12 +30,21 @@ module.exports = class ForgerManager {
    * @param  {String} password
    * @return {Array}
    */
-  async loadDelegates (bip38, password) {
-    if (!bip38 && !this.secrets) {
-      throw new Error('No delegate found')
+  async loadDelegates(bip38, password) {
+    if (
+      !bip38 &&
+      (!this.secrets || !this.secrets.length || !Array.isArray(this.secrets))
+    ) {
+      logger.warn(
+        'No delegate found! Please check your "delegates.json" file and try again.',
+      )
+      return
     }
 
-    this.delegates = this.secrets.map(passphrase => new Delegate(passphrase, this.network, password))
+    this.secrets = uniq(this.secrets.map(secret => secret.trim()))
+    this.delegates = this.secrets.map(
+      passphrase => new Delegate(passphrase, this.network, password),
+    )
 
     if (bip38) {
       logger.info('BIP38 Delegate loaded')
@@ -45,11 +54,14 @@ module.exports = class ForgerManager {
 
     await this.__loadUsernames(2000)
 
-    const delegates = this.delegates.map(delegate => {
-      return `${this.usernames[delegate.publicKey]} (${delegate.publicKey})`
-    })
+    const delegates = this.delegates.map(
+      delegate =>
+        `${this.usernames[delegate.publicKey]} (${delegate.publicKey})`,
+    )
 
-    logger.debug(`Loaded ${delegates} delegates.`)
+    logger.debug(
+      `Loaded ${pluralize('delegate', delegates.length, true)}: ${delegates.join(', ')}`,
+    )
 
     return this.delegates
   }
@@ -58,7 +70,7 @@ module.exports = class ForgerManager {
    * Start forging on the given node.
    * @return {Object}
    */
-  async startForging () {
+  async startForging() {
     const slot = slots.getSlotNumber()
 
     while (slots.getSlotNumber() === slot) {
@@ -72,7 +84,7 @@ module.exports = class ForgerManager {
    * Stop forging on the given node.
    * @return {void}
    */
-  async stop () {
+  async stop() {
     this.isStopped = true
   }
 
@@ -81,7 +93,7 @@ module.exports = class ForgerManager {
    * @param  {Object} round
    * @return {Function}
    */
-  async __monitor (round) {
+  async __monitor(round) {
     try {
       if (this.isStopped) {
         return
@@ -90,7 +102,9 @@ module.exports = class ForgerManager {
       await this.__loadUsernames()
 
       round = await this.client.getRound()
-      const delayTime = parseInt(config.getConstants(round.lastBlock.height).blocktime) * 1000 - 2000
+      const delayTime =
+        parseInt(config.getConstants(round.lastBlock.height).blocktime) * 1000 -
+        2000
 
       if (!round.canForge) {
         // logger.debug('Block already forged in current slot')
@@ -104,11 +118,17 @@ module.exports = class ForgerManager {
       const delegate = this.__isDelegateActivated(round.currentForger.publicKey)
 
       if (!delegate) {
-        // logger.debug(`Current forging delegate ${round.currentForger.publicKey} is not configured on this node.`)
+        // logger.debug(`Current forging delegate ${
+        //  round.currentForger.publicKey
+        // } is not configured on this node.`)
 
         if (this.__isDelegateActivated(round.nextForger.publicKey)) {
           const username = this.usernames[round.nextForger.publicKey]
-          logger.info(`Next forging delegate ${username} (${round.nextForger.publicKey}) is active on this node.`)
+          logger.info(
+            `Next forging delegate ${username} (${
+              round.nextForger.publicKey
+            }) is active on this node.`,
+          )
           await this.client.syncCheck()
         }
 
@@ -133,7 +153,11 @@ module.exports = class ForgerManager {
     } catch (error) {
       // README: The Blockchain is not ready, monitor until it is instead of crashing.
       if (error.response && error.response.status === 503) {
-        logger.warn(`Blockchain not ready - ${error.response.status} ${error.response.statusText}`)
+        logger.warn(
+          `Blockchain not ready - ${error.response.status} ${
+            error.response.statusText
+          }`,
+        )
 
         await delay(2000)
 
@@ -143,7 +167,11 @@ module.exports = class ForgerManager {
       // README: The Blockchain is ready but an action still failed.
       logger.error(`Forging failed: ${error.message} :bangbang:`)
 
-      logger.info('Round:', round ? round.current : '', 'Height:', round ? round.lastBlock.height.toLocaleString() : '')
+      if (!isEmpty(round)) {
+        logger.info(
+          `Round: ${round.current.toLocaleString()}, height: ${round.lastBlock.height.toLocaleString()}`,
+        )
+      }
 
       await delay(2000) // no idea when this will be ok, so waiting 2s before checking again
 
@@ -158,7 +186,7 @@ module.exports = class ForgerManager {
    * @param {Object} delegate
    * @param {Object} round
    */
-  async __forgeNewBlock (delegate, round) {
+  async __forgeNewBlock(delegate, round) {
     // TODO: Disabled for now as this could cause a delay in forging that
     // results in missing a block which we want to avoid.
     //
@@ -177,28 +205,44 @@ module.exports = class ForgerManager {
     const block = await delegate.forge(transactions, blockOptions)
 
     const username = this.usernames[delegate.publicKey]
-    logger.info(`Forged new block ${block.data.id} by delegate ${username} (${delegate.publicKey}) :trident:`)
+    logger.info(
+      `Forged new block ${block.data.id} by delegate ${username} (${
+        delegate.publicKey
+      }) :trident:`,
+    )
 
     await this.client.broadcast(block.toJson())
 
     this.client.emitEvent('block.forged', block.data)
-    transactions.forEach(transaction => this.client.emitEvent('transaction.forged', transaction.data))
+    transactions.forEach(transaction =>
+      this.client.emitEvent('transaction.forged', transaction.data),
+    )
   }
 
   /**
    * Gets the unconfirmed transactions from the relay nodes transaction pool
    */
-  async __getTransactionsForForging () {
+  async __getTransactionsForForging() {
     const response = await this.client.getTransactions()
 
     const transactions = response.transactions
-      ? response.transactions.map(serializedTx => Transaction.fromBytes(serializedTx))
+      ? response.transactions.map(serializedTx =>
+          Transaction.fromBytes(serializedTx),
+        )
       : []
 
     if (isEmpty(response)) {
-      logger.error('Could not get unconfirmed transactions from transaction pool.')
+      logger.error(
+        'Could not get unconfirmed transactions from transaction pool.',
+      )
     } else {
-      logger.debug(`Received ${transactions.length} transactions from the pool containing ${response.poolSize} :money_with_wings:`)
+      logger.debug(
+        `Received ${
+          pluralize('transaction', transactions.length, true)
+        } from the pool containing ${
+          response.poolSize
+        } :money_with_wings:`,
+      )
     }
 
     return transactions
@@ -209,8 +253,10 @@ module.exports = class ForgerManager {
    * @param  {Object} PublicKey
    * @return {Object}
    */
-  __isDelegateActivated (queryPublicKey) {
-    return this.delegates.find(delegate => delegate.publicKey === queryPublicKey)
+  __isDelegateActivated(queryPublicKey) {
+    return this.delegates.find(
+      delegate => delegate.publicKey === queryPublicKey,
+    )
   }
 
   /**
@@ -218,8 +264,8 @@ module.exports = class ForgerManager {
    * @param {Object} networkState internal response
    * @param {Booolean} isAllowedToForge
    */
-  __analyseNetworkState (networkState, currentForger) {
-    const badState = (networkState, message) => {
+  __analyseNetworkState(networkState, currentForger) {
+    const badState = message => {
       logger.info(message)
       logger.debug(`Network State: ${JSON.stringify(networkState, null, 4)}`)
 
@@ -227,21 +273,31 @@ module.exports = class ForgerManager {
     }
 
     if (networkState.coldStart) {
-      return badState(networkState, 'Not allowed to forge during the cold start period. Check peers.json for coldStart setting.')
+      return badState(
+        'Not allowed to forge during the cold start period. Check peers.json for coldStart setting.',
+      )
     }
 
     if (!networkState.minimumNetworkReach) {
-      return badState(networkState, 'Network reach is not sufficient to get quorum.')
+      return badState('Network reach is not sufficient to get quorum.')
     }
 
-    if (networkState.overHeightBlockHeader && networkState.overHeightBlockHeader.generatorPublicKey === currentForger.publicKey) {
+    if (
+      networkState.overHeightBlockHeader &&
+      networkState.overHeightBlockHeader.generatorPublicKey ===
+        currentForger.publicKey
+    ) {
       const usernames = this.usernames[currentForger.publicKey]
 
-      return badState(networkState, `Possible double forging for delegate: ${usernames} (${currentForger.publicKey}).`)
+      return badState(
+        `Possible double forging for delegate: ${usernames} (${
+          currentForger.publicKey
+        }).`,
+      )
     }
 
     if (networkState.quorum < 0.66) {
-      return badState(networkState, 'Fork 6 - Not enough quorum to forge next block.')
+      return badState('Fork 6 - Not enough quorum to forge next block.')
     }
 
     return true
@@ -251,7 +307,7 @@ module.exports = class ForgerManager {
    * Get a list of all active delegate usernames.
    * @return {Object}
    */
-  async __loadUsernames (wait = 0) {
+  async __loadUsernames(wait = 0) {
     this.usernames = await this.client.getUsernames(wait)
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "@arkecosystem/crypto",
   "description": "Crypto utilities for the Ark Blockchain",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "contributors": [
     "François-Xavier Thoorens <fx.thoorens@ark.io>",
     "Brian Faust <brian@ark.io>",
@@ -26,11 +26,14 @@
     "test:debug": "cross-env ARK_ENV=test node --inspect-brk ../../node_modules/.bin/jest --runInBand",
     "test:watch": "jest --watch",
     "test:watch:all": "jest --watchAll",
-    "lint": "eslint -c ../../.eslintrc --ignore-pattern dist ./ --fix",
-    "depcheck": "depcheck ./"
+    "flow:coverage": "flow-coverage-report --config ../../.flowcoverage.json",
+    "flow:check": "flow check ./lib",
+    "flow:deps": "flow-typed install",
+    "lint": "eslint ./ --fix",
+    "depcheck": "depcheck ./ --ignores=flow-bin"
   },
   "dependencies": {
-    "bignumber.js": "^7.2.1",
+    "bignumber.js": "^8.0.1",
     "bip32": "^1.0.2",
     "bip38": "^2.0.2",
     "bip39": "^2.5.0",
@@ -38,7 +41,7 @@
     "bytebuffer": "^5.0.1",
     "create-hash": "^1.2.0",
     "deepmerge": "^2.2.1",
-    "joi": "^14.0.1",
+    "joi": "^14.0.4",
     "lodash": "^4.17.11",
     "moment": "^2.22.2",
     "node-forge": "^0.7.6",
@@ -51,5 +54,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "flow-bin": "^0.86.0"
   }
 }

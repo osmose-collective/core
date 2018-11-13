@@ -1,15 +1,15 @@
-'use strict'
+/* eslint no-use-before-define: "warn" */
+/* eslint max-len: "off" */
 
 const axios = require('axios')
 const MockAdapter = require('axios-mock-adapter')
+
 const axiosMock = new MockAdapter(axios)
 const delay = require('delay')
 
 const { asValue } = require('awilix')
 const { crypto, slots } = require('@arkecosystem/crypto')
 const { Block, Wallet } = require('@arkecosystem/crypto').models
-
-const app = require('./__support__/setup')
 
 let genesisBlock
 let container
@@ -20,6 +20,7 @@ let peerMock
 
 const blocks1to100 = require('@arkecosystem/core-test-utils/fixtures/testnet/blocks.2-100')
 const blocks101to155 = require('@arkecosystem/core-test-utils/fixtures/testnet/blocks.101-155')
+const app = require('./__support__/setup')
 
 beforeAll(async () => {
   container = await app.setUp()
@@ -33,7 +34,9 @@ beforeAll(async () => {
 
   // Create the genesis block after the setup has finished or else it uses a potentially
   // wrong network config.
-  genesisBlock = new Block(require('@arkecosystem/core-test-utils/config/testnet/genesisBlock.json'))
+  genesisBlock = new Block(
+    require('@arkecosystem/core-test-utils/config/testnet/genesisBlock.json'),
+  )
 
   // Manually register the blockchain and start it
   await __start()
@@ -92,7 +95,9 @@ describe('Blockchain', () => {
     })
 
     it('should throw an exception', () => {
-      expect(() => blockchain.checkNetwork()).toThrowError('Method [checkNetwork] not implemented!')
+      expect(() => blockchain.checkNetwork()).toThrow(
+        'Method [checkNetwork] not implemented!',
+      )
     })
   })
 
@@ -108,7 +113,9 @@ describe('Blockchain', () => {
     })
 
     it('should throw an exception', () => {
-      expect(() => blockchain.rebuild()).toThrowError('Method [rebuild] not implemented!')
+      expect(() => blockchain.rebuild()).toThrow(
+        'Method [rebuild] not implemented!',
+      )
     })
   })
 
@@ -130,7 +137,9 @@ describe('Blockchain', () => {
 
       expect(transactions.length).toBe(genesisBlock.transactions.length)
 
-      expect(transactions).toEqual(genesisBlock.transactions.map(transaction => transaction.serialized))
+      expect(transactions).toEqual(
+        genesisBlock.transactions.map(transaction => transaction.serialized),
+      )
 
       await blockchain.transactionPool.flush()
     })
@@ -142,7 +151,6 @@ describe('Blockchain', () => {
     })
 
     it('should be ok', async () => {
-      const { Block } = require('@arkecosystem/crypto').models
       const block = new Block(blocks101to155[54])
 
       await blockchain.queueBlock(blocks101to155[54])
@@ -265,19 +273,23 @@ describe('Blockchain', () => {
     })
 
     it('should process a new unchained block', async () => {
-      const mockLoggerDebug = jest.fn((message) => true)
+      const mockLoggerDebug = jest.fn(message => true)
       logger.debug = mockLoggerDebug
 
       const lastBlock = blockchain.getLastBlock()
       await blockchain.removeBlocks(2) // remove 2 blocks so that we can have _lastBlock_ as an unchained block
       await blockchain.manageUnchainedBlock(lastBlock)
 
-      expect(mockLoggerDebug).toBeCalled()
+      expect(mockLoggerDebug).toHaveBeenCalled()
 
-      const debugMessage = `Blockchain not ready to accept new block at height ${lastBlock.data.height}. Last block: ${lastBlock.data.height - 2} :warning:`
-      expect(mockLoggerDebug).lastCalledWith(debugMessage)
+      const debugMessage = `Blockchain not ready to accept new block at height ${
+        lastBlock.data.height
+      }. Last block: ${lastBlock.data.height - 2} :warning:`
+      expect(mockLoggerDebug).toHaveBeenLastCalledWith(debugMessage)
 
-      expect(blockchain.getLastBlock().data.height).toBe(lastBlock.data.height - 2)
+      expect(blockchain.getLastBlock().data.height).toBe(
+        lastBlock.data.height - 2,
+      )
     })
   })
 
@@ -289,11 +301,17 @@ describe('Blockchain', () => {
     it('should get unconfirmed transactions', async () => {
       await blockchain.transactionPool.flush()
       await blockchain.postTransactions(genesisBlock.transactions, false)
-      const unconfirmedTransactions = await blockchain.getUnconfirmedTransactions(200)
+      const unconfirmedTransactions = await blockchain.getUnconfirmedTransactions(
+        200,
+      )
 
-      expect(unconfirmedTransactions.transactions.length).toBe(genesisBlock.transactions.length)
+      expect(unconfirmedTransactions.transactions.length).toBe(
+        genesisBlock.transactions.length,
+      )
 
-      expect(unconfirmedTransactions.transactions).toEqual(genesisBlock.transactions.map(transaction => transaction.serialized))
+      expect(unconfirmedTransactions.transactions).toEqual(
+        genesisBlock.transactions.map(transaction => transaction.serialized),
+      )
 
       await blockchain.transactionPool.flush()
     })
@@ -306,18 +324,22 @@ describe('Blockchain', () => {
 
     describe('with a block param', () => {
       it('should be ok', () => {
-        expect(blockchain.isSynced({ data: {
-          timestamp: slots.getTime(),
-          height: genesisBlock.height
-        } })).toBeTrue()
+        expect(
+          blockchain.isSynced({
+            data: {
+              timestamp: slots.getTime(),
+              height: genesisBlock.height,
+            },
+          }),
+        ).toBeTrue()
       })
     })
 
-    xdescribe('without a block param', () => {
+    describe.skip('without a block param', () => {
       it('should use the last block', () => {
         blockchain.getLastBlock = jest.fn(() => ({
           timestamp: slots.getTime() - genesisBlock.timestamp,
-          height: genesisBlock.height
+          height: genesisBlock.height,
         }))
         expect(blockchain.isSynced()).toBeTrue()
         expect(blockchain.getLastBlock()).toHaveBeenCalledWith(true)
@@ -332,18 +354,22 @@ describe('Blockchain', () => {
 
     describe('with a block param', () => {
       it('should be ok', () => {
-        expect(blockchain.isRebuildSynced({ data: {
-          timestamp: slots.getTime() - 3600 * 24 * 6,
-          height: blocks101to155[52].height
-        } })).toBeTrue()
+        expect(
+          blockchain.isRebuildSynced({
+            data: {
+              timestamp: slots.getTime() - 3600 * 24 * 6,
+              height: blocks101to155[52].height,
+            },
+          }),
+        ).toBeTrue()
       })
     })
 
-    xdescribe('without a block param', () => {
+    describe.skip('without a block param', () => {
       it('should use the last block', () => {
         blockchain.getLastBlock = jest.fn(() => ({
           timestamp: slots.getTime() - genesisBlock.timestamp,
-          height: genesisBlock.height
+          height: genesisBlock.height,
         }))
         expect(blockchain.isRebuildSynced()).toBeTrue()
         expect(blockchain.getLastBlock()).toHaveBeenCalledWith(true)
@@ -373,8 +399,8 @@ describe('Blockchain', () => {
         data: {
           id: 1,
           timestamp: 1,
-          height: 1
-        }
+          height: 1,
+        },
       }
 
       const nextBlock = {
@@ -382,8 +408,8 @@ describe('Blockchain', () => {
           id: 2,
           timestamp: 2,
           height: 2,
-          previousBlock: 1
-        }
+          previousBlock: 1,
+        },
       }
 
       expect(blockchain.__isChained(previousBlock, nextBlock)).toBeTrue()
@@ -394,8 +420,8 @@ describe('Blockchain', () => {
         data: {
           id: 2,
           timestamp: 2,
-          height: 2
-        }
+          height: 2,
+        },
       }
 
       const nextBlock = {
@@ -403,8 +429,8 @@ describe('Blockchain', () => {
           id: 1,
           timestamp: 1,
           height: 1,
-          previousBlock: 1
-        }
+          previousBlock: 1,
+        },
       }
 
       expect(blockchain.__isChained(previousBlock, nextBlock)).toBeFalse()
@@ -426,22 +452,25 @@ describe('Blockchain', () => {
   })
 })
 
-async function __start () {
+async function __start() {
   process.env.ARK_SKIP_BLOCKCHAIN = false
   process.env.ARK_ENV = false
 
   const plugin = require('../lib').plugin
 
   blockchain = await plugin.register(container, {
-    networkStart: false
+    networkStart: false,
   })
 
-  await container.register('blockchain', asValue({
-    name: 'blockchain',
-    version: '0.1.0',
-    plugin: blockchain,
-    options: {}
-  }))
+  await container.register(
+    'blockchain',
+    asValue({
+      name: 'blockchain',
+      version: '0.1.0',
+      plugin: blockchain,
+      options: {},
+    }),
+  )
 
   const p2p = container.resolvePlugin('p2p')
   await p2p.acceptNewPeer(peerMock)
@@ -449,12 +478,15 @@ async function __start () {
   await __resetToHeight1()
 
   await blockchain.start(true)
-  while (!blockchain.getLastBlock() || blockchain.getLastBlock().data.height < 155) {
+  while (
+    !blockchain.getLastBlock() ||
+    blockchain.getLastBlock().data.height < 155
+  ) {
     await delay(1000)
   }
 }
 
-async function __resetToHeight1 () {
+async function __resetToHeight1() {
   const lastBlock = await blockchain.database.getLastBlock()
   if (lastBlock) {
     // Make sure the wallet manager has been fed or else revertRound
@@ -476,19 +508,51 @@ async function __resetToHeight1 () {
   }
 }
 
-function __mockPeer () {
+function __mockPeer() {
   // Mocking a peer which will send blocks until height 155
   const Peer = require('@arkecosystem/core-p2p/lib/peer')
   peerMock = new Peer('0.0.0.99', 4002)
   Object.assign(peerMock, peerMock.headers, { status: 200 })
 
-  axiosMock.onGet(/.*\/peer\/blocks\/common.*/).reply(() => [200, { status: 200, success: true, common: true }, peerMock.headers])
-  axiosMock.onGet(/.*\/peer\/blocks/).reply((config) => {
-    const blocks = config.params.lastBlockHeight === 1 ? blocks1to100
-      : config.params.lastBlockHeight === 100 ? blocks101to155 : []
+  axiosMock
+    .onGet(/.*\/peer\/blocks\/common.*/)
+    .reply(() => [
+      200,
+      { status: 200, success: true, common: true },
+      peerMock.headers,
+    ])
+  axiosMock.onGet(/.*\/peer\/blocks/).reply(config => {
+    let blocks = []
+
+    if (config.params.lastBlockHeight === 1) {
+      blocks = blocks1to100
+    } else if (config.params.lastBlockHeight === 100) {
+      blocks = blocks101to155
+    }
 
     return [200, { status: 200, success: true, blocks }, peerMock.headers]
   })
-  axiosMock.onGet(/.*\/peer\/status/).reply(() => [200, { status: 200, success: true, height: 155 }, peerMock.headers])
-  axiosMock.onGet(/.*\/peer\/list/).reply(() => [200, { success: true, peers: [ { status: 200, ip: peerMock.ip, port: 4002, height: 155, delay: 8 } ] }, peerMock.headers])
+  axiosMock
+    .onGet(/.*\/peer\/status/)
+    .reply(() => [
+      200,
+      { status: 200, success: true, height: 155 },
+      peerMock.headers,
+    ])
+  axiosMock.onGet(/.*\/peer\/list/).reply(() => [
+    200,
+    {
+      success: true,
+      peers: [
+        {
+          status: 200,
+          ip: peerMock.ip,
+          port: 4002,
+          height: 155,
+          delay: 8,
+        },
+      ],
+    },
+    peerMock.headers,
+  ])
 }

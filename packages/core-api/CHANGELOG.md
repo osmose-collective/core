@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Unreleased
 
 ### Added
+
 - Return forged rewards and fees via v2 API
 - Return error feedback for transaction posting via v2 API
 - Cache block heights to reduce database load
@@ -17,7 +18,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Blockchains endpoint to provide information like supply
 - Allow registration of additional plugins
 
+### Fixed
+
+- Ensure order parameters are treated as lower-case and properly formatted
+
 ### Changed
+
 - Use the IANA format for the API vendor in the `Accept` header
 - Use the official `hapi-api-version` dependency
 - Return ports as integers
@@ -26,11 +32,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Sort peers by latency
 - Stricter validation of parameters
 - Dropped node.js 9 as minimum requirement in favour of node.js 10
+- Return a `type` and `message` property for transaction errors
 
 ### Removed
+
 - All `redis` integrations and dependencies
 
 ### Fixed
+
 - Return the delegate list in the v1 format with correct limits
 - Add the missing `vendorField` property to transactions
 - Broken search in the v2 API for blocks and transactions
@@ -48,4 +57,5 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## 0.1.1 - 2018-06-14
 
 ### Added
+
 - initial release

@@ -1,8 +1,10 @@
-'use strict'
+/* eslint max-len: "off" */
+
 const axios = require('axios')
 const sample = require('lodash/sample')
 const delay = require('delay')
 const container = require('@arkecosystem/core-container')
+
 const logger = container.resolvePlugin('logger')
 const config = container.resolvePlugin('config')
 
@@ -11,14 +13,14 @@ module.exports = class Client {
    * Create a new client instance.
    * @param  {(Array|String)} hosts - Host or Array of hosts
    */
-  constructor (hosts) {
+  constructor(hosts) {
     this.hosts = Array.isArray(hosts) ? hosts : [hosts]
 
     this.headers = {
-      'version': container.resolveOptions('blockchain').version,
-      'port': container.resolveOptions('p2p').port,
-      'nethash': config.network.nethash,
-      'x-auth': 'forger'
+      version: container.resolveOptions('blockchain').version,
+      port: container.resolveOptions('p2p').port,
+      nethash: config.network.nethash,
+      'x-auth': 'forger',
     }
   }
 
@@ -27,8 +29,14 @@ module.exports = class Client {
    * @param  {(Block|Object)} block
    * @return {Object}
    */
-  async broadcast (block) {
-    logger.debug(`Broadcasting forged block id:${block.id} at height:${block.height.toLocaleString()} with ${block.numberOfTransactions} transactions to ${this.host} :package:`)
+  async broadcast(block) {
+    logger.debug(
+      `Broadcasting forged block id:${
+        block.id
+      } at height:${block.height.toLocaleString()} with ${
+        block.numberOfTransactions
+      } transactions to ${this.host} :package:`,
+    )
 
     return this.__post(`${this.host}/internal/blocks`, { block })
   }
@@ -36,7 +44,7 @@ module.exports = class Client {
   /**
    * Sends the WAKEUP signal to the to relay hosts to check if synced and sync if necesarry
    */
-  async syncCheck () {
+  async syncCheck() {
     await this.__chooseHost()
 
     logger.debug(`Sending wake-up check to relay node ${this.host}`)
@@ -52,19 +60,23 @@ module.exports = class Client {
    * Get the current round.
    * @return {Object}
    */
-  async getRound () {
-    await this.__chooseHost()
+  async getRound() {
+    try {
+      await this.__chooseHost()
 
-    const response = await this.__get(`${this.host}/internal/rounds/current`)
+      const response = await this.__get(`${this.host}/internal/rounds/current`)
 
-    return response.data.data
+      return response.data.data
+    } catch (e) {
+      return {}
+    }
   }
 
   /**
    * Get the current network quorum.
    * @return {Object}
    */
-  async getNetworkState () {
+  async getNetworkState() {
     try {
       const response = await this.__get(`${this.host}/internal/network/state`)
 
@@ -78,9 +90,11 @@ module.exports = class Client {
    * Get all transactions that are ready to be forged.
    * @return {Object}
    */
-  async getTransactions () {
+  async getTransactions() {
     try {
-      const response = await this.__get(`${this.host}/internal/transactions/forging`)
+      const response = await this.__get(
+        `${this.host}/internal/transactions/forging`,
+      )
 
       return response.data.data
     } catch (e) {
@@ -92,7 +106,7 @@ module.exports = class Client {
    * Get a list of all active delegate usernames.
    * @return {Object}
    */
-  async getUsernames (wait = 0) {
+  async getUsernames(wait = 0) {
     await this.__chooseHost(wait)
 
     try {
@@ -110,16 +124,21 @@ module.exports = class Client {
    * @param  {Object} body
    * @return {Object}
    */
-  async emitEvent (event, body) {
+  async emitEvent(event, body) {
     // NOTE: Events need to be emitted to the localhost. If you need to trigger
     // actions on a remote host based on events you should be using webhooks
     // that get triggered by the events you wish to react to.
 
-    const allowedHosts = ['localhost', '127.0.0.1', '::ffff:127.0.0.1', '192.168.*']
+    const allowedHosts = [
+      'localhost',
+      '127.0.0.1',
+      '::ffff:127.0.0.1',
+      '192.168.*',
+    ]
 
-    const host = this.hosts.find(host => {
-      return allowedHosts.some(allowedHost => host.includes(allowedHost))
-    })
+    const host = this.hosts.find(item =>
+      allowedHosts.some(allowedHost => item.includes(allowedHost)),
+    )
 
     if (!host) {
       return logger.error('Was unable to find any local hosts.')
@@ -136,7 +155,7 @@ module.exports = class Client {
    * Chose a responsive host.
    * @return {void}
    */
-  async __chooseHost (wait = 0) {
+  async __chooseHost(wait = 0) {
     const host = sample(this.hosts)
 
     try {
@@ -144,7 +163,9 @@ module.exports = class Client {
 
       this.host = host
     } catch (error) {
-      logger.debug(`${host} didn't respond to the forger. Trying another host :sparkler:`)
+      logger.debug(
+        `${host} didn't respond to the forger. Trying another host :sparkler:`,
+      )
 
       if (wait > 0) {
         await delay(wait)
@@ -154,11 +175,11 @@ module.exports = class Client {
     }
   }
 
-  async __get (url) {
+  async __get(url) {
     return axios.get(url, { headers: this.headers, timeout: 2000 })
   }
 
-  async __post (url, body) {
+  async __post(url, body) {
     return axios.post(url, body, { headers: this.headers, timeout: 2000 })
   }
 }

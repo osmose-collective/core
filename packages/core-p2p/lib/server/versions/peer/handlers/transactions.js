@@ -1,6 +1,6 @@
-'use strict'
-
 const Boom = require('boom')
+const pluralize = require('pluralize')
+
 const container = require('@arkecosystem/core-container')
 const { TransactionGuard } = require('@arkecosystem/core-transaction-pool')
 const { crypto } = require('@arkecosystem/crypto')
@@ -20,11 +20,11 @@ exports.index = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  handler (request, h) {
+  handler(request, h) {
     return {
-      data: []
+      data: [],
     }
-  }
+  },
 }
 
 /**
@@ -36,34 +36,37 @@ exports.store = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  async handler (request, h) {
-    /**
-     * Here we will make sure we memorize the transactions for future requests
-     * and decide which transactions are valid or invalid in order to prevent
-     * duplication and race conditions caused by concurrent requests.
-     */
-    const { valid, invalid } = transactionPool.memory.memorize(request.payload.transactions)
+  async handler(request, h) {
+    const { eligible, notEligible } = transactionPool.checkEligibility(
+      request.payload.transactions,
+    )
 
     const guard = new TransactionGuard(transactionPool)
-    guard.invalidate(invalid, 'Already memorized.')
 
-    await guard.validate(valid)
+    for (const ne of notEligible) {
+      guard.invalidate(ne.transaction, ne.reason)
+    }
+
+    await guard.validate(eligible)
 
     if (guard.hasAny('invalid')) {
-      return Boom.notAcceptable('Transactions list could not be accepted.', guard.errors)
+      return Boom.notAcceptable(
+        'Transactions list could not be accepted.',
+        guard.errors,
+      )
     }
 
     // TODO: Review throttling of v1
     if (guard.hasAny('accept')) {
-      logger.info(`Accepted ${guard.accept.length} transactions from ${request.payload.transactions.length} received`)
+      logger.info(
+        `Accepted ${pluralize('transaction', guard.accept.length, true)} from ${
+          request.payload.transactions.length
+        } received`,
+      )
 
       logger.verbose(`Accepted transactions: ${guard.accept.map(tx => tx.id)}`)
 
       await transactionPool.addTransactions([...guard.accept, ...guard.excess])
-
-      transactionPool.memory
-        .forget(guard.getIds('accept'))
-        .forget(guard.getIds('excess'))
     }
 
     if (!request.payload.isBroadCasted && guard.hasAny('broadcast')) {
@@ -73,15 +76,15 @@ exports.store = {
     }
 
     return {
-      data: guard.getIds('accept')
+      data: guard.getIds('accept'),
     }
   },
   config: {
     cors: {
-      additionalHeaders: ['nethash', 'port', 'version']
+      additionalHeaders: ['nethash', 'port', 'version'],
     },
-    validate: schema.store
-  }
+    validate: schema.store,
+  },
 }
 
 /**
@@ -93,23 +96,31 @@ exports.search = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  async handler (request, h) {
-    const transactionIds = request.payload.transactions.slice(0, 100).filter(id => id.match('[0-9a-fA-F]{32}'))
-    const rows = await container.resolvePlugin('database').getTransactionsFromIds(transactionIds)
+  async handler(request, h) {
+    const transactionIds = request.payload.transactions
+      .slice(0, 100)
+      .filter(id => id.match('[0-9a-fA-F]{32}'))
+    const rows = await container
+      .resolvePlugin('database')
+      .getTransactionsFromIds(transactionIds)
 
     // TODO: v1 compatibility patch. Add transformer and refactor later on
     const transactions = rows.map(row => {
-      let transaction = Transaction.deserialize(row.serialized.toString('hex'))
+      const transaction = Transaction.deserialize(
+        row.serialized.toString('hex'),
+      )
       transaction.blockId = row.block_id
       transaction.senderId = crypto.getAddress(transaction.senderPublicKey)
       return transaction
     })
 
-    const data = transactionIds.map((transaction, i) => (transactionIds[i] = transactions.find(tx2 => tx2.id === transactionIds[i])))
+    transactionIds.forEach((transaction, i) => {
+      transactionIds[i] = transactions.find(tx2 => tx2.id === transactionIds[i])
+    })
 
-    return { data }
+    return { data: transactionIds }
   },
   options: {
-    validate: schema.search
-  }
+    validate: schema.search,
+  },
 }

@@ -1,0 +1,40 @@
+{
+  "env": {
+    "commonjs": true,
+    "node": true,
+    "jest": true
+  },
+  "extends": ["@arkecosystem/eslint-config-base"],
+  "rules": {
+    // TODO: fix later as they require a lot of changes
+    "camelcase": "off",
+    "class-methods-use-this": "off",
+    "consistent-return": "off",
+    "global-require": "off",
+    "guard-for-in": "off",
+    "import/no-dynamic-require": "off",
+    "jest/no-disabled-tests": "off",
+    "jest/valid-expect": "off",
+    "no-await-in-loop": "off",
+    "no-bitwise": "off",
+    "no-console": [
+      "error",
+      { "allow": ["error", "info", "warn", "time", "timeEnd"] }
+    ],
+    "no-case-declarations": "off",
+    "no-continue": "off",
+    "no-param-reassign": "off",
+    "no-plusplus": "off",
+    "no-prototype-builtins": "off",
+    "no-unused-expressions": "off",
+    "no-restricted-globals": "off",
+    "no-restricted-properties": "off",
+    "no-restricted-syntax": "off",
+    "no-underscore-dangle": "off",
+    "no-unused-vars": "off",
+    "prefer-destructuring": "off",
+    "radix": "off",
+    "semi-style": "off",
+    "complexity": "off"
+  }
+}

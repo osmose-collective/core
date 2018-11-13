@@ -1,5 +1,3 @@
-'use strict'
-
 const container = require('@arkecosystem/core-container')
 
 /**
@@ -7,20 +5,22 @@ const container = require('@arkecosystem/core-container')
  * @param  {Object} options
  * @return {void}
  */
-module.exports = async (options) => {
+module.exports = async options => {
   await container.setUp(options, {
     options: {
       '@arkecosystem/core-p2p': {
-        networkStart: options.networkStart
+        networkStart: options.networkStart,
+        disableDiscovery: options.disableDiscovery,
+        skipDiscovery: options.skipDiscovery,
       },
       '@arkecosystem/core-blockchain': {
-        networkStart: options.networkStart
+        networkStart: options.networkStart,
       },
       '@arkecosystem/core-forger': {
         bip38: options.bip38 || process.env.ARK_FORGER_BIP38,
         address: options.address,
-        password: options.password || process.env.ARK_FORGER_PASSWORD
-      }
-    }
+        password: options.password || process.env.ARK_FORGER_PASSWORD,
+      },
+    },
   })
 }

@@ -1,11 +1,9 @@
-'use strict'
-
 const container = require('@arkecosystem/core-container')
 const { TransactionGuard } = require('@arkecosystem/core-transaction-pool')
-const { Block } = require('@arkecosystem/crypto').models
-const requestIp = require('request-ip')
 const { slots, crypto } = require('@arkecosystem/crypto')
-const { Transaction } = require('@arkecosystem/crypto').models
+const { Block, Transaction } = require('@arkecosystem/crypto').models
+const requestIp = require('request-ip')
+const pluralize = require('pluralize')
 
 const transactionPool = container.resolvePlugin('transactionPool')
 const logger = container.resolvePlugin('logger')
@@ -21,20 +19,24 @@ exports.getPeers = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  async handler (request, h) {
+  async handler(request, h) {
     try {
-      const peers = monitor.getPeers()
+      const peers = monitor
+        .getPeers()
         .map(peer => peer.toBroadcastInfo())
         .sort((a, b) => a.delay - b.delay)
 
       return {
         success: true,
-        peers
+        peers,
       }
     } catch (error) {
-      return h.response({ success: false, message: error.message }).code(500).takeover()
+      return h
+        .response({ success: false, message: error.message })
+        .code(500)
+        .takeover()
     }
-  }
+  },
 }
 
 /**
@@ -46,15 +48,15 @@ exports.getHeight = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  handler (request, h) {
+  handler(request, h) {
     const lastBlock = container.resolvePlugin('blockchain').getLastBlock()
 
     return {
       success: true,
       height: lastBlock.data.height,
-      id: lastBlock.data.id
+      id: lastBlock.data.id,
     }
-  }
+  },
 }
 
 /**
@@ -66,16 +68,19 @@ exports.getCommonBlocks = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  async handler (request, h) {
+  async handler(request, h) {
     if (!request.query.ids) {
       return {
-        success: false
+        success: false,
       }
     }
 
     const blockchain = container.resolvePlugin('blockchain')
 
-    const ids = request.query.ids.split(',').slice(0, 9).filter(id => id.match(/^\d+$/))
+    const ids = request.query.ids
+      .split(',')
+      .slice(0, 9)
+      .filter(id => id.match(/^\d+$/))
 
     try {
       const commonBlocks = await blockchain.database.getCommonBlocks(ids)
@@ -83,12 +88,15 @@ exports.getCommonBlocks = {
       return {
         success: true,
         common: commonBlocks.length ? commonBlocks[0] : null,
-        lastBlockHeight: blockchain.getLastBlock().data.height
+        lastBlockHeight: blockchain.getLastBlock().data.height,
       }
     } catch (error) {
-      return h.response({ success: false, message: error.message }).code(500).takeover()
+      return h
+        .response({ success: false, message: error.message })
+        .code(500)
+        .takeover()
     }
-  }
+  },
 }
 
 /**
@@ -100,26 +108,40 @@ exports.getTransactionsFromIds = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  async handler (request, h) {
+  async handler(request, h) {
     try {
-      const transactionIds = request.query.ids.split(',').slice(0, 100).filter(id => id.match('[0-9a-fA-F]{32}'))
-      const rows = await container.resolvePlugin('database').getTransactionsFromIds(transactionIds)
+      const transactionIds = request.query.ids
+        .split(',')
+        .slice(0, 100)
+        .filter(id => id.match('[0-9a-fA-F]{32}'))
+      const rows = await container
+        .resolvePlugin('database')
+        .getTransactionsFromIds(transactionIds)
 
       // TODO: v1 compatibility patch. Add transformer and refactor later on
       const transactions = await rows.map(row => {
-        let transaction = Transaction.deserialize(row.serialized.toString('hex'))
+        const transaction = Transaction.deserialize(
+          row.serialized.toString('hex'),
+        )
         transaction.blockId = row.block_id
         transaction.senderId = crypto.getAddress(transaction.senderPublicKey)
         return transaction
       })
 
-      const returnTrx = transactionIds.map((transaction, i) => (transactionIds[i] = transactions.find(tx2 => tx2.id === transactionIds[i])))
+      transactionIds.forEach((transaction, i) => {
+        transactionIds[i] = transactions.find(
+          tx2 => tx2.id === transactionIds[i],
+        )
+      })
 
-      return { success: true, transactions: returnTrx }
+      return { success: true, transactions: transactionIds }
     } catch (error) {
-      return h.response({ success: false, message: error.message }).code(500).takeover()
+      return h
+        .response({ success: false, message: error.message })
+        .code(500)
+        .takeover()
     }
-  }
+  },
 }
 
 /**
@@ -131,9 +153,9 @@ exports.getTransactions = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  handler (request, h) {
+  handler(request, h) {
     return { success: true, transactions: [] }
-  }
+  },
 }
 
 /**
@@ -145,7 +167,7 @@ exports.getStatus = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  handler (request, h) {
+  handler(request, h) {
     const lastBlock = container.resolvePlugin('blockchain').getLastBlock()
 
     return {
@@ -153,9 +175,9 @@ exports.getStatus = {
       height: lastBlock ? lastBlock.data.height : 0,
       forgingAllowed: slots.isForgingAllowed(),
       currentSlot: slots.getSlotNumber(),
-      header: lastBlock ? lastBlock.getHeader() : {}
+      header: lastBlock ? lastBlock.getHeader() : {},
     }
-  }
+  },
 }
 
 /**
@@ -167,7 +189,7 @@ exports.postBlock = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  async handler (request, h) {
+  async handler(request, h) {
     const blockchain = container.resolvePlugin('blockchain')
 
     try {
@@ -182,7 +204,10 @@ exports.postBlock = {
       const lastDownloadedBlock = blockchain.getLastDownloadedBlock()
 
       // Are we ready to get it?
-      if (lastDownloadedBlock && lastDownloadedBlock.data.height + 1 !== block.height) {
+      if (
+        lastDownloadedBlock &&
+        lastDownloadedBlock.data.height + 1 !== block.height
+      ) {
         return { success: true }
       }
 
@@ -198,7 +223,8 @@ exports.postBlock = {
         // let missingIds = []
         let transactions = []
         // if (transactionPool) {
-        //   transactions = block.transactionIds.map(async id => await transactionPool.getTransaction(id) || id)
+        //   transactions = block.transactionIds
+        //    .map(async id => await transactionPool.getTransaction(id) || id)
         //   missingIds = transactions.filter(tx => !tx.id)
         // } else {
         //   missingIds = block.transactionIds.slice(0)
@@ -216,11 +242,17 @@ exports.postBlock = {
 
         transactions = await peer.getTransactionsFromIds(block.transactionIds)
         // issue on v1, using /api/ instead of /peer/
-        if (transactions.length < block.transactionIds.length) transactions = await peer.getTransactionsFromBlock(block.id)
+        if (transactions.length < block.transactionIds.length) {
+          transactions = await peer.getTransactionsFromBlock(block.id)
+        }
 
         // reorder them correctly
-        block.transactions = block.transactionIds.map(id => transactions.find(tx => tx.id === id))
-        logger.debug(`Found missing transactions: ${block.transactions.map(tx => tx.id)}`)
+        block.transactions = block.transactionIds.map(id =>
+          transactions.find(tx => tx.id === id),
+        )
+        logger.debug(
+          `Found missing transactions: ${block.transactions.map(tx => tx.id)}`,
+        )
 
         if (block.transactions.length !== block.numberOfTransactions) {
           return { success: false }
@@ -236,7 +268,7 @@ exports.postBlock = {
       logger.error(error)
       return { success: false }
     }
-  }
+  },
 }
 
 /**
@@ -248,7 +280,7 @@ exports.postTransactions = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  async handler (request, h) {
+  async handler(request, h) {
     let error
     if (!request.payload || !request.payload.transactions) {
       error = 'No transactions received'
@@ -260,48 +292,54 @@ exports.postTransactions = {
       return {
         success: false,
         message: error,
-        error: error
+        error,
       }
     }
 
-    if (request.payload.transactions.length > transactionPool.options.maxTransactionsPerRequest) {
-      return h.response({
-        success: false,
-        error: 'Number of transactions is exceeding max payload size per single request.'
-      }).code(500)
+    if (
+      request.payload.transactions.length >
+      transactionPool.options.maxTransactionsPerRequest
+    ) {
+      return h
+        .response({
+          success: false,
+          error:
+            'Number of transactions is exceeding max payload size per single request.',
+        })
+        .code(500)
     }
 
-    /**
-     * Here we will make sure we memorize the transactions for future requests
-     * and decide which transactions are valid or invalid in order to prevent
-     * duplication and race conditions caused by concurrent requests.
-     */
-    const { valid, invalid } = transactionPool.memory.memorize(request.payload.transactions)
+    const { eligible, notEligible } = transactionPool.checkEligibility(
+      request.payload.transactions,
+    )
 
     const guard = new TransactionGuard(transactionPool)
-    guard.invalidate(invalid, 'Already memorized.')
 
-    await guard.validate(valid)
+    for (const ne of notEligible) {
+      guard.invalidate(ne.transaction, ne.reason)
+    }
+
+    await guard.validate(eligible)
 
     if (guard.hasAny('invalid')) {
       return {
         success: false,
         message: 'Transactions list is not conform',
-        error: 'Transactions list is not conform'
+        error: 'Transactions list is not conform',
       }
     }
 
     // TODO: Review throttling of v1
     if (guard.hasAny('accept')) {
-      logger.info(`Accepted ${guard.accept.length} transactions from ${request.payload.transactions.length} received`)
+      logger.info(
+        `Accepted ${pluralize('transaction', guard.accept.length, true)} from ${
+          request.payload.transactions.length
+        } received`,
+      )
 
       logger.verbose(`Accepted transactions: ${guard.accept.map(tx => tx.id)}`)
 
       await transactionPool.addTransactions([...guard.accept, ...guard.excess])
-
-      transactionPool.memory
-        .forget(guard.getIds('accept'))
-        .forget(guard.getIds('excess'))
     }
 
     if (!request.payload.isBroadCasted && guard.hasAny('broadcast')) {
@@ -312,14 +350,14 @@ exports.postTransactions = {
 
     return {
       success: true,
-      transactionIds: guard.getIds('accept')
+      transactionIds: guard.getIds('accept'),
     }
   },
   config: {
     cors: {
-      additionalHeaders: ['nethash', 'port', 'version']
-    }
-  }
+      additionalHeaders: ['nethash', 'port', 'version'],
+    },
+  },
 }
 
 /**
@@ -331,11 +369,11 @@ exports.getBlocks = {
    * @param  {Hapi.Toolkit} h
    * @return {Hapi.Response}
    */
-  async handler (request, h) {
+  async handler(request, h) {
     try {
       const database = container.resolvePlugin('database')
       const blockchain = container.resolvePlugin('blockchain')
-      let reqBlockHeight = parseInt(request.query.lastBlockHeight)
+      const reqBlockHeight = parseInt(request.query.lastBlockHeight)
       let blocks = []
       if (!request.query.lastBlockHeight || Number.isNaN(reqBlockHeight)) {
         blocks.push(blockchain.getLastBlock())
@@ -343,13 +381,17 @@ exports.getBlocks = {
         blocks = await database.getBlocks(parseInt(reqBlockHeight) + 1, 400)
       }
 
-      logger.info(`${requestIp.getClientIp(request)} has downloaded ${blocks.length} blocks from height ${request.query.lastBlockHeight}`)
+      logger.info(
+        `${requestIp.getClientIp(request)} has downloaded ${
+          pluralize('block', blocks.length, true)
+        } from height ${request.query.lastBlockHeight}`,
+      )
 
       return { success: true, blocks: blocks || [] }
     } catch (error) {
       logger.error(error.stack)
 
-      return h.response({ success: false, error: error }).code(500)
+      return h.response({ success: false, error }).code(500)
     }
-  }
+  },
 }

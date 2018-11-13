@@ -1,20 +1,26 @@
-'use strict'
+/* eslint no-use-before-define: "warn" */
+/* eslint max-len: "off" */
 
 const pgPromise = require('pg-promise')
 const crypto = require('crypto')
 const chunk = require('lodash/chunk')
+const pluralize = require('pluralize')
 const fs = require('fs')
 
 const { ConnectionInterface } = require('@arkecosystem/core-database')
 
 const container = require('@arkecosystem/core-container')
+
 const config = container.resolvePlugin('config')
 const logger = container.resolvePlugin('logger')
 const emitter = container.resolvePlugin('event-emitter')
 
 const { roundCalculator } = require('@arkecosystem/core-utils')
 
-const { Bignum, models: { Block, Transaction } } = require('@arkecosystem/crypto')
+const {
+  Bignum,
+  models: { Block, Transaction },
+} = require('@arkecosystem/crypto')
 
 const SPV = require('./spv')
 
@@ -28,7 +34,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Make the database connection instance.
    * @return {PostgresConnection}
    */
-  async make () {
+  async make() {
     if (this.db) {
       throw new Error('Database connection already initialised')
     }
@@ -58,16 +64,16 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Connect to the database.
    * @return {void}
    */
-  async connect () {
+  async connect() {
     const initialization = {
-      receive (data, result, e) {
+      receive(data, result, e) {
         camelizeColumns(pgp, data)
       },
-      extend (object) {
+      extend(object) {
         for (const repository of Object.keys(repositories)) {
           object[repository] = new repositories[repository](object, pgp)
         }
-      }
+      },
     }
 
     const pgp = pgPromise({ ...this.config.initialization, ...initialization })
@@ -80,7 +86,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Disconnects from the database and closes the cache.
    * @return {Promise} The successfulness of closing the Sequelize connection
    */
-  async disconnect () {
+  async disconnect() {
     try {
       await this.commitQueuedQueries()
       this.cache.clear()
@@ -103,7 +109,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * - Sum of all tx amount equals the sum of block.totalAmount
    * @return {Object} An object { valid, errors } with the result of the verification and the errors
    */
-  async verifyBlockchain () {
+  async verifyBlockchain() {
     const errors = []
 
     const lastBlock = await this.getLastBlock()
@@ -116,41 +122,65 @@ module.exports = class PostgresConnection extends ConnectionInterface {
 
       // Last block height equals the number of stored blocks
       if (lastBlock.data.height !== +numberOfBlocks) {
-        errors.push(`Last block height: ${lastBlock.data.height.toLocaleString()}, number of stored blocks: ${numberOfBlocks}`)
+        errors.push(
+          `Last block height: ${lastBlock.data.height.toLocaleString()}, number of stored blocks: ${numberOfBlocks}`,
+        )
       }
     }
 
     const blockStats = await this.db.blocks.statistics()
     const transactionStats = await this.db.transactions.statistics()
-    const { count: negativeBalances } = await this.db.wallets.findNegativeBalances()
-    const { count: negativeVoteBalances } = await this.db.wallets.findNegativeVoteBalances()
+    const {
+      count: negativeBalances,
+    } = await this.db.wallets.findNegativeBalances()
+    const {
+      count: negativeVoteBalances,
+    } = await this.db.wallets.findNegativeVoteBalances()
 
     if (+negativeBalances > 1) {
-      errors.push(`Expected 1 wallet with a negative balance but found ${negativeBalances}`)
+      errors.push(
+        `Expected 1 wallet with a negative balance but found ${negativeBalances}`,
+      )
     }
 
     if (+negativeVoteBalances !== 0) {
-      errors.push(`Expected 0 wallets with a negative vote balance but found ${negativeVoteBalances}`)
+      errors.push(
+        `Expected 0 wallets with a negative vote balance but found ${negativeVoteBalances}`,
+      )
     }
 
     // Number of stored transactions equals the sum of block.numberOfTransactions in the database
     if (blockStats.numberOfTransactions !== transactionStats.count) {
-      errors.push(`Number of transactions: ${transactionStats.count}, number of transactions included in blocks: ${blockStats.numberOfTransactions}`)
+      errors.push(
+        `Number of transactions: ${
+          transactionStats.count
+        }, number of transactions included in blocks: ${
+          blockStats.numberOfTransactions
+        }`,
+      )
     }
 
     // Sum of all tx fees equals the sum of block.totalFee
     if (blockStats.totalFee !== transactionStats.totalFee) {
-      errors.push(`Total transaction fees: ${transactionStats.totalFee}, total of block.totalFee : ${blockStats.totalFee}`)
+      errors.push(
+        `Total transaction fees: ${
+          transactionStats.totalFee
+        }, total of block.totalFee : ${blockStats.totalFee}`,
+      )
     }
 
     // Sum of all tx amount equals the sum of block.totalAmount
     if (blockStats.totalAmount !== transactionStats.totalAmount) {
-      errors.push(`Total transaction amounts: ${transactionStats.totalAmount}, total of block.totalAmount : ${blockStats.totalAmount}`)
+      errors.push(
+        `Total transaction amounts: ${
+          transactionStats.totalAmount
+        }, total of block.totalAmount : ${blockStats.totalAmount}`,
+      )
     }
 
     return {
       valid: !errors.length,
-      errors
+      errors,
     }
   }
 
@@ -160,11 +190,15 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Array} delegates
    * @return {Array}
    */
-  async getActiveDelegates (height, delegates) {
+  async getActiveDelegates(height, delegates) {
     const maxDelegates = config.getConstants(height).activeDelegates
     const round = Math.floor((height - 1) / maxDelegates) + 1
 
-    if (this.forgingDelegates && this.forgingDelegates.length && this.forgingDelegates[0].round === round) {
+    if (
+      this.forgingDelegates &&
+      this.forgingDelegates.length &&
+      this.forgingDelegates[0].round === round
+    ) {
       return this.forgingDelegates
     }
 
@@ -174,7 +208,10 @@ module.exports = class PostgresConnection extends ConnectionInterface {
     }
 
     const seedSource = round.toString()
-    let currentSeed = crypto.createHash('sha256').update(seedSource, 'utf8').digest()
+    let currentSeed = crypto
+      .createHash('sha256')
+      .update(seedSource, 'utf8')
+      .digest()
 
     for (let i = 0, delCount = delegates.length; i < delCount; i++) {
       for (let x = 0; x < 4 && i < delCount; i++, x++) {
@@ -183,7 +220,10 @@ module.exports = class PostgresConnection extends ConnectionInterface {
         delegates[newIndex] = delegates[i]
         delegates[i] = b
       }
-      currentSeed = crypto.createHash('sha256').update(currentSeed).digest()
+      currentSeed = crypto
+        .createHash('sha256')
+        .update(currentSeed)
+        .digest()
     }
 
     this.forgingDelegates = delegates.map(delegate => {
@@ -199,7 +239,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Array} delegates
    * @return {Array}
    */
-  async saveRound (delegates) {
+  async saveRound(delegates) {
     logger.info(`Saving round ${delegates[0].round}`)
 
     await this.db.rounds.create(delegates)
@@ -212,7 +252,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Number} round
    * @return {Promise}
    */
-  async deleteRound (round) {
+  async deleteRound(round) {
     return this.db.rounds.delete(round)
   }
 
@@ -221,7 +261,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Number} height
    * @return {Boolean} success
    */
-  async buildWallets (height) {
+  async buildWallets(height) {
     this.walletManager.reset()
 
     const spvPath = `${process.env.ARK_PATH_DATA}/spv.json`
@@ -229,7 +269,9 @@ module.exports = class PostgresConnection extends ConnectionInterface {
     if (fs.existsSync(spvPath)) {
       fs.removeSync(spvPath)
 
-      logger.info('Ark Core ended unexpectedly - resuming from where we left off :runner:')
+      logger.info(
+        'Ark Core ended unexpectedly - resuming from where we left off :runner:',
+      )
 
       return true
     }
@@ -252,7 +294,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Load all wallets from database.
    * @return {Array}
    */
-  async loadWallets () {
+  async loadWallets() {
     const wallets = await this.db.wallets.all()
 
     this.walletManager.index(wallets)
@@ -265,16 +307,17 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Boolean} force
    * @return {void}
    */
-  async saveWallets (force) {
-    const wallets = this.walletManager.allByPublicKey().filter(wallet => {
-      return wallet.publicKey && (force || wallet.dirty)
-    })
+  async saveWallets(force) {
+    const wallets = this.walletManager
+      .allByPublicKey()
+      .filter(wallet => wallet.publicKey && (force || wallet.dirty))
 
     // Remove dirty flags first to not save all dirty wallets in the exit handler
     // when called during a force insert right after SPV.
     this.walletManager.clear()
 
-    if (force) { // all wallets to be updated, performance is better without upsert
+    if (force) {
+      // all wallets to be updated, performance is better without upsert
       await this.db.wallets.truncate()
 
       try {
@@ -288,14 +331,18 @@ module.exports = class PostgresConnection extends ConnectionInterface {
       // so it is safe to perform the costly UPSERT non-blocking during round change only:
       // 'await saveWallets(false)' -> 'saveWallets(false)'
       try {
-        const queries = wallets.map(wallet => this.db.wallets.updateOrCreate(wallet))
+        const queries = wallets.map(wallet =>
+          this.db.wallets.updateOrCreate(wallet),
+        )
         await this.db.tx(t => t.batch(queries))
       } catch (error) {
         logger.error(error.stack)
       }
     }
 
-    logger.info(`${wallets.length} modified wallets committed to database`)
+    logger.info(`${wallets.length} modified ${
+      pluralize('wallet', wallets.length)
+    } committed to database`)
 
     emitter.emit('wallet.saved', wallets.length)
 
@@ -309,7 +356,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Block} block
    * @return {void}
    */
-  async saveBlock (block) {
+  async saveBlock(block) {
     try {
       const queries = [this.db.blocks.create(block.data)]
 
@@ -328,11 +375,11 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Block} block
    * @return {void}
    */
-  async deleteBlock (block) {
+  async deleteBlock(block) {
     try {
       const queries = [
         this.db.transactions.deleteByBlock(block.data.id),
-        this.db.blocks.delete(block.data.id)
+        this.db.blocks.delete(block.data.id),
       ]
 
       await this.db.tx(t => t.batch(queries))
@@ -349,7 +396,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Block} block
    * @return {void}
    */
-  enqueueSaveBlock (block) {
+  enqueueSaveBlock(block) {
     const queries = [this.db.blocks.create(block.data)]
 
     if (block.transactions.length > 0) {
@@ -365,10 +412,10 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Block} block
    * @return {void}
    */
-  enqueueDeleteBlock (block) {
+  enqueueDeleteBlock(block) {
     const queries = [
       this.db.transactions.deleteByBlock(block.data.id),
-      this.db.blocks.delete(block.data.id)
+      this.db.blocks.delete(block.data.id),
     ]
 
     this.enqueueQueries(queries)
@@ -379,8 +426,10 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Number} round
    * @return {void}
    */
-  enqueueDeleteRound (height) {
-    const { round, nextRound, maxDelegates } = roundCalculator.calculateRound(height)
+  enqueueDeleteRound(height) {
+    const { round, nextRound, maxDelegates } = roundCalculator.calculateRound(
+      height,
+    )
 
     if (nextRound === round + 1 && height >= maxDelegates) {
       this.enqueueQueries([this.db.rounds.delete(nextRound)])
@@ -391,7 +440,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Add queries to the queue to be executed when calling commit.
    * @param {Array} queries
    */
-  enqueueQueries (queries) {
+  enqueueQueries(queries) {
     if (!this.queuedQueries) {
       this.queuedQueries = []
     }
@@ -404,7 +453,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * NOTE: to be used in combination with enqueueSaveBlock and enqueueDeleteBlock.
    * @return {void}
    */
-  async commitQueuedQueries () {
+  async commitQueuedQueries() {
     if (!this.queuedQueries || this.queuedQueries.length === 0) {
       return
     }
@@ -427,7 +476,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Number} id
    * @return {Block}
    */
-  async getBlock (id) {
+  async getBlock(id) {
     // TODO: caching the last 1000 blocks, in combination with `saveBlock` could help to optimise
     const block = await this.db.blocks.findById(id)
 
@@ -437,7 +486,9 @@ module.exports = class PostgresConnection extends ConnectionInterface {
 
     const transactions = await this.db.transactions.findByBlock(block.id)
 
-    block.transactions = transactions.map(({ serialized }) => Transaction.deserialize(serialized.toString('hex')))
+    block.transactions = transactions.map(({ serialized }) =>
+      Transaction.deserialize(serialized.toString('hex')),
+    )
 
     return new Block(block)
   }
@@ -446,7 +497,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Get the last block.
    * @return {(Block|null)}
    */
-  async getLastBlock () {
+  async getLastBlock() {
     const block = await this.db.blocks.latest()
 
     if (!block) {
@@ -455,7 +506,9 @@ module.exports = class PostgresConnection extends ConnectionInterface {
 
     const transactions = await this.db.transactions.latestByBlock(block.id)
 
-    block.transactions = transactions.map(({ serialized }) => Transaction.deserialize(serialized.toString('hex')))
+    block.transactions = transactions.map(({ serialized }) =>
+      Transaction.deserialize(serialized.toString('hex')),
+    )
 
     return new Block(block)
   }
@@ -465,7 +518,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Number} id
    * @return {Promise}
    */
-  async getTransaction (id) {
+  async getTransaction(id) {
     return this.db.transactions.findById(id)
   }
 
@@ -474,7 +527,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Array} ids
    * @return {Array}
    */
-  async getCommonBlocks (ids) {
+  async getCommonBlocks(ids) {
     const state = container.resolve('state')
     let commonBlocks = state.getCommonBlocks(ids)
     if (commonBlocks.length < ids.length) {
@@ -489,7 +542,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Array} ids
    * @return {Array}
    */
-  async getTransactionsFromIds (ids) {
+  async getTransactionsFromIds(ids) {
     return this.db.transactions.findManyById(ids)
   }
 
@@ -498,7 +551,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Array} ids
    * @return {Array}
    */
-  async getForgedTransactionsIds (ids) {
+  async getForgedTransactionsIds(ids) {
     if (!ids.length) {
       return []
     }
@@ -514,11 +567,13 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Number} limit
    * @return {Array}
    */
-  async getBlocks (offset, limit) {
+  async getBlocks(offset, limit) {
     let blocks = []
 
     if (container.has('state')) {
-      blocks = container.resolve('state').getLastBlocksByHeight(offset, offset + limit)
+      blocks = container
+        .resolve('state')
+        .getLastBlocksByHeight(offset, offset + limit)
     }
 
     if (blocks.length !== limit) {
@@ -536,7 +591,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Number} count
    * @return {Array}
    */
-  async getTopBlocks (count) {
+  async getTopBlocks(count) {
     const blocks = await this.db.blocks.top(count)
 
     await this.loadTransactionsForBlocks(blocks)
@@ -549,7 +604,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Array} blocks
    * @return {void}
    */
-  async loadTransactionsForBlocks (blocks) {
+  async loadTransactionsForBlocks(blocks) {
     if (!blocks.length) {
       return
     }
@@ -565,7 +620,9 @@ module.exports = class PostgresConnection extends ConnectionInterface {
 
     for (const block of blocks) {
       if (block.numberOfTransactions > 0) {
-        block.transactions = transactions.filter(transaction => transaction.blockId === block.id)
+        block.transactions = transactions.filter(
+          transaction => transaction.blockId === block.id,
+        )
       }
     }
   }
@@ -574,9 +631,12 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Get the 10 recent block ids.
    * @return {[]String}
    */
-  async getRecentBlockIds () {
+  async getRecentBlockIds() {
     const state = container.resolve('state')
-    let blocks = state.getLastBlockIds().reverse().slice(0, 10)
+    let blocks = state
+      .getLastBlockIds()
+      .reverse()
+      .slice(0, 10)
 
     if (blocks.length < 10) {
       blocks = await this.db.blocks.recent()
@@ -592,7 +652,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * @param  {Number} limit
    * @return {Array}
    */
-  async getBlockHeaders (offset, limit) {
+  async getBlockHeaders(offset, limit) {
     const blocks = await this.db.blocks.headers(offset, offset + limit)
 
     return blocks.map(block => Block.serialize(block))
@@ -602,7 +662,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Get the cache object
    * @return {Cache}
    */
-  getCache () {
+  getCache() {
     return this.cache
   }
 
@@ -610,7 +670,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Run all migrations.
    * @return {void}
    */
-  async __runMigrations () {
+  async __runMigrations() {
     for (const migration of migrations) {
       await this.query.none(migration)
     }
@@ -620,7 +680,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Register all models.
    * @return {void}
    */
-  async __registerModels () {
+  async __registerModels() {
     this.models = {}
 
     for (const [key, Value] of Object.entries(require('./models'))) {
@@ -632,7 +692,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Register the query builder.
    * @return {void}
    */
-  __registerQueryExecutor () {
+  __registerQueryExecutor() {
     this.query = new QueryExecutor(this)
   }
 
@@ -640,7 +700,7 @@ module.exports = class PostgresConnection extends ConnectionInterface {
    * Register event listeners.
    * @return {void}
    */
-  __registerListeners () {
+  __registerListeners() {
     super.__registerListeners()
 
     emitter.on('wallet.created.cold', async coldWallet => {
@@ -653,7 +713,8 @@ module.exports = class PostgresConnection extends ConnectionInterface {
               return
             }
 
-            coldWallet[key] = key !== 'voteBalance' ? wallet[key] : new Bignum(wallet[key])
+            coldWallet[key] =
+              key !== 'voteBalance' ? wallet[key] : new Bignum(wallet[key])
           })
         }
       } catch (err) {
