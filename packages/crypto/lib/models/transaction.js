@@ -1,5 +1,7 @@
+/* eslint no-bitwise: "off" */
+
 const bs58check = require('bs58check')
-const { cloneDeepWith } = require('lodash')
+const cloneDeepWith = require('lodash/cloneDeepWith')
 const ByteBuffer = require('bytebuffer')
 const { createHash } = require('crypto')
 const { Bignum } = require('../utils')
@@ -57,8 +59,7 @@ module.exports = class Transaction {
       // TODO: enable AIP11 when network ready
       this.verified = false
     }
-    // if (this.data.amount !== transaction.amount) console.error('bang', transaction, this.data);
-    [
+    ;[
       'id',
       'sequence',
       'version',
@@ -112,8 +113,8 @@ module.exports = class Transaction {
     }
 
     if (
-      deserialized.type === TRANSACTION_TYPES.SECOND_SIGNATURE
-      || deserialized.type === TRANSACTION_TYPES.MULTI_SIGNATURE
+      deserialized.type === TRANSACTION_TYPES.SECOND_SIGNATURE ||
+      deserialized.type === TRANSACTION_TYPES.MULTI_SIGNATURE
     ) {
       deserialized.recipientId = crypto.getAddress(
         deserialized.senderPublicKey,
@@ -343,10 +344,12 @@ module.exports = class Transaction {
 
     if (transaction.type === TRANSACTION_TYPES.MULTI_SIGNATURE) {
       transaction.asset = { multisignature: { keysgroup: [] } }
-      transaction.asset.multisignature.min = buf.readInt8(assetOffset / 2) & 0xff
+      transaction.asset.multisignature.min =
+        buf.readInt8(assetOffset / 2) & 0xff
 
       const num = buf.readInt8(assetOffset / 2 + 1) & 0xff
-      transaction.asset.multisignature.lifetime = buf.readInt8(assetOffset / 2 + 2) & 0xff
+      transaction.asset.multisignature.lifetime =
+        buf.readInt8(assetOffset / 2 + 2) & 0xff
 
       for (let index = 0; index < num; index++) {
         const key = hexString.slice(
@@ -436,7 +439,8 @@ module.exports = class Transaction {
     if (transaction.signature.length === 0) {
       delete transaction.signature
     } else {
-      const length1 = parseInt(`0x${transaction.signature.substring(2, 4)}`, 16) + 2
+      const length1 =
+        parseInt(`0x${transaction.signature.substring(2, 4)}`, 16) + 2
       transaction.signature = hexString.substring(
         startOffset,
         startOffset + length1 * 2,
@@ -452,7 +456,8 @@ module.exports = class Transaction {
         // start of multisign
         delete transaction.secondSignature
       } else {
-        const length2 = parseInt(`0x${transaction.secondSignature.substring(2, 4)}`, 16) + 2
+        const length2 =
+          parseInt(`0x${transaction.secondSignature.substring(2, 4)}`, 16) + 2
         transaction.secondSignature = transaction.secondSignature.substring(
           0,
           length2 * 2,

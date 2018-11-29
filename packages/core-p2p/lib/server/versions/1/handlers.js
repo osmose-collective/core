@@ -1,12 +1,17 @@
-const container = require('@arkecosystem/core-container')
+/* eslint no-restricted-globals: "off" */
+
+const app = require('@arkecosystem/core-container')
 const { TransactionGuard } = require('@arkecosystem/core-transaction-pool')
 const { slots, crypto } = require('@arkecosystem/crypto')
 const { Block, Transaction } = require('@arkecosystem/crypto').models
+const Joi = require('@arkecosystem/crypto').validator.engine.joi
+
 const requestIp = require('request-ip')
 const pluralize = require('pluralize')
 
-const transactionPool = container.resolvePlugin('transactionPool')
-const logger = container.resolvePlugin('logger')
+const transactionPool = app.resolvePlugin('transactionPool')
+const config = app.resolvePlugin('config')
+const logger = app.resolvePlugin('logger')
 
 const monitor = require('../../../monitor')
 
@@ -49,7 +54,7 @@ exports.getHeight = {
    * @return {Hapi.Response}
    */
   handler(request, h) {
-    const lastBlock = container.resolvePlugin('blockchain').getLastBlock()
+    const lastBlock = app.resolvePlugin('blockchain').getLastBlock()
 
     return {
       success: true,
@@ -75,7 +80,7 @@ exports.getCommonBlocks = {
       }
     }
 
-    const blockchain = container.resolvePlugin('blockchain')
+    const blockchain = app.resolvePlugin('blockchain')
 
     const ids = request.query.ids
       .split(',')
@@ -110,11 +115,16 @@ exports.getTransactionsFromIds = {
    */
   async handler(request, h) {
     try {
+      const blockchain = app.resolvePlugin('blockchain')
+      const maxTransactions = config.getConstants(blockchain.getLastHeight())
+        .block.maxTransactions
+
       const transactionIds = request.query.ids
         .split(',')
-        .slice(0, 100)
+        .slice(0, maxTransactions)
         .filter(id => id.match('[0-9a-fA-F]{32}'))
-      const rows = await container
+
+      const rows = await app
         .resolvePlugin('database')
         .getTransactionsFromIds(transactionIds)
 
@@ -168,7 +178,7 @@ exports.getStatus = {
    * @return {Hapi.Response}
    */
   handler(request, h) {
-    const lastBlock = container.resolvePlugin('blockchain').getLastBlock()
+    const lastBlock = app.resolvePlugin('blockchain').getLastBlock()
 
     return {
       success: true,
@@ -190,7 +200,7 @@ exports.postBlock = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const blockchain = container.resolvePlugin('blockchain')
+    const blockchain = app.resolvePlugin('blockchain')
 
     try {
       if (!request.payload || !request.payload.block) {
@@ -281,47 +291,18 @@ exports.postTransactions = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    let error
-    if (!request.payload || !request.payload.transactions) {
-      error = 'No transactions received'
-    } else if (!transactionPool) {
-      error = 'Transaction pool not available'
-    }
-
-    if (error) {
+    if (!transactionPool) {
       return {
         success: false,
-        message: error,
-        error,
+        message: 'Transaction pool not available',
       }
     }
 
-    if (
-      request.payload.transactions.length >
-      transactionPool.options.maxTransactionsPerRequest
-    ) {
-      return h
-        .response({
-          success: false,
-          error:
-            'Number of transactions is exceeding max payload size per single request.',
-        })
-        .code(500)
-    }
-
-    const { eligible, notEligible } = transactionPool.checkEligibility(
-      request.payload.transactions,
-    )
-
     const guard = new TransactionGuard(transactionPool)
 
-    for (const ne of notEligible) {
-      guard.invalidate(ne.transaction, ne.reason)
-    }
+    const result = await guard.validate(request.payload.transactions)
 
-    await guard.validate(eligible)
-
-    if (guard.hasAny('invalid')) {
+    if (result.invalid.length > 0) {
       return {
         success: false,
         message: 'Transactions list is not conform',
@@ -329,33 +310,28 @@ exports.postTransactions = {
       }
     }
 
-    // TODO: Review throttling of v1
-    if (guard.hasAny('accept')) {
-      logger.info(
-        `Accepted ${pluralize('transaction', guard.accept.length, true)} from ${
-          request.payload.transactions.length
-        } received`,
-      )
-
-      logger.verbose(`Accepted transactions: ${guard.accept.map(tx => tx.id)}`)
-
-      await transactionPool.addTransactions([...guard.accept, ...guard.excess])
-    }
-
-    if (!request.payload.isBroadCasted && guard.hasAny('broadcast')) {
-      await container
+    if (result.broadcast.length > 0) {
+      app
         .resolvePlugin('p2p')
-        .broadcastTransactions(guard.broadcast)
+        .broadcastTransactions(guard.getBroadcastTransactions())
     }
 
     return {
       success: true,
-      transactionIds: guard.getIds('accept'),
+      transactionIds: result.accept,
     }
   },
-  config: {
+  options: {
     cors: {
       additionalHeaders: ['nethash', 'port', 'version'],
+    },
+    validate: {
+      payload: {
+        transactions: Joi.arkTransactions()
+          .min(1)
+          .max(app.resolveOptions('transactionPool').maxTransactionsPerRequest)
+          .options({ stripUnknown: true }),
+      },
     },
   },
 }
@@ -371,20 +347,27 @@ exports.getBlocks = {
    */
   async handler(request, h) {
     try {
-      const database = container.resolvePlugin('database')
-      const blockchain = container.resolvePlugin('blockchain')
-      const reqBlockHeight = parseInt(request.query.lastBlockHeight)
+      const database = app.resolvePlugin('database')
+      const blockchain = app.resolvePlugin('blockchain')
+
+      const reqBlockHeight = parseInt(request.query.lastBlockHeight) + 1
       let blocks = []
-      if (!request.query.lastBlockHeight || Number.isNaN(reqBlockHeight)) {
+
+      if (!request.query.lastBlockHeight || isNaN(reqBlockHeight)) {
         blocks.push(blockchain.getLastBlock())
       } else {
-        blocks = await database.getBlocks(parseInt(reqBlockHeight) + 1, 400)
+        blocks = await database.getBlocks(reqBlockHeight, 400)
       }
 
       logger.info(
-        `${requestIp.getClientIp(request)} has downloaded ${
-          pluralize('block', blocks.length, true)
-        } from height ${request.query.lastBlockHeight}`,
+        `${requestIp.getClientIp(request)} has downloaded ${pluralize(
+          'block',
+          blocks.length,
+          true,
+        )} from height ${(!isNaN(reqBlockHeight)
+          ? reqBlockHeight
+          : blocks[0].data.height
+        ).toLocaleString()}`,
       )
 
       return { success: true, blocks: blocks || [] }

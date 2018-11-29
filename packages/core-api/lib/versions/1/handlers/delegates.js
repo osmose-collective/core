@@ -1,8 +1,8 @@
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const config = container.resolvePlugin('config')
-const database = container.resolvePlugin('database')
-const blockchain = container.resolvePlugin('blockchain')
+const config = app.resolvePlugin('config')
+const database = app.resolvePlugin('database')
+const blockchain = app.resolvePlugin('blockchain')
 const { slots } = require('@arkecosystem/crypto')
 
 const utils = require('../utils')
@@ -18,18 +18,9 @@ exports.index = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const { count, rows } = await database.delegates.paginate({
-      ...request.query,
-      ...{
-        offset: request.query.offset || 0,
-        limit: request.query.limit || 51,
-      },
-    })
+    const data = await request.server.methods.v1.delegates.index(request)
 
-    return utils.respondWith({
-      delegates: utils.toCollection(request, rows, 'delegate'),
-      totalCount: count,
-    })
+    return utils.respondWithCache(data, h)
   },
   config: {
     plugins: {
@@ -50,21 +41,9 @@ exports.show = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    if (!request.query.publicKey && !request.query.username) {
-      return utils.respondWith('Delegate not found', true)
-    }
+    const data = await request.server.methods.v1.delegates.show(request)
 
-    const delegate = await database.delegates.findById(
-      request.query.publicKey || request.query.username,
-    )
-
-    if (!delegate) {
-      return utils.respondWith('Delegate not found', true)
-    }
-
-    return utils.respondWith({
-      delegate: utils.toResource(request, delegate, 'delegate'),
-    })
+    return utils.respondWithCache(data, h)
   },
   config: {
     plugins: {
@@ -85,9 +64,9 @@ exports.count = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const { count } = await database.delegates.findAll()
+    const data = await request.server.methods.v1.delegates.count(request)
 
-    return utils.respondWith({ count })
+    return utils.respondWithCache(data, h)
   },
 }
 
@@ -101,17 +80,9 @@ exports.search = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const query = {
-      username: request.query.q,
-    }
-    const { rows } = await database.delegates.search({
-      ...query,
-      ...utils.paginate(request),
-    })
+    const data = await request.server.methods.v1.delegates.search(request)
 
-    return utils.respondWith({
-      delegates: utils.toCollection(request, rows, 'delegate'),
-    })
+    return utils.respondWithCache(data, h)
   },
   config: {
     plugins: {
@@ -132,19 +103,9 @@ exports.voters = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const delegate = await database.delegates.findById(request.query.publicKey)
+    const data = await request.server.methods.v1.delegates.voters(request)
 
-    if (!delegate) {
-      return utils.respondWith({
-        accounts: [],
-      })
-    }
-
-    const accounts = await database.wallets.findAllByVote(delegate.publicKey)
-
-    return utils.respondWith({
-      accounts: utils.toCollection(request, accounts.rows, 'voter'),
-    })
+    return utils.respondWithCache(data, h)
   },
   config: {
     plugins: {
@@ -167,7 +128,7 @@ exports.fee = {
   handler(request, h) {
     return utils.respondWith({
       fee: config.getConstants(blockchain.getLastBlock().data.height).fees
-        .delegateRegistration,
+        .staticFees.delegateRegistration,
     })
   },
 }

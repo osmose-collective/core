@@ -1,5 +1,6 @@
 /* eslint no-use-before-define: "warn" */
 /* eslint max-len: "off" */
+/* eslint no-await-in-loop: "off" */
 
 const axios = require('axios')
 const MockAdapter = require('axios-mock-adapter')
@@ -12,6 +13,7 @@ const { crypto, slots } = require('@arkecosystem/crypto')
 const { Block, Wallet } = require('@arkecosystem/crypto').models
 
 let genesisBlock
+let configManager
 let container
 let blockchain
 let logger
@@ -38,12 +40,22 @@ beforeAll(async () => {
     require('@arkecosystem/core-test-utils/config/testnet/genesisBlock.json'),
   )
 
+  configManager = container.resolvePlugin('config')
+
+  // Workaround: Add genesis transactions to the exceptions list, because they have a fee of 0
+  // and otherwise don't pass validation.
+  configManager.network.exceptions.transactions = genesisBlock.transactions.map(
+    tx => tx.id,
+  )
+
   // Manually register the blockchain and start it
   await __start()
 })
 
 afterAll(async () => {
   axiosMock.reset()
+
+  delete configManager.network.exceptions.transactions
 
   await __resetToHeight1()
 
@@ -53,9 +65,11 @@ afterAll(async () => {
   await app.tearDown()
 })
 
-afterEach(() => {
+afterEach(async () => {
   // Restore original logger.debug function
   logger.debug = loggerDebugBackup
+
+  await __resetBlocksInCurrentRound()
 })
 
 describe('Blockchain', () => {
@@ -131,14 +145,18 @@ describe('Blockchain', () => {
     })
 
     it('should be ok', async () => {
+      const transactionsWithoutType2 = genesisBlock.transactions.filter(
+        tx => tx.type !== 2,
+      )
+
       await blockchain.transactionPool.flush()
-      await blockchain.postTransactions(genesisBlock.transactions, false)
+      await blockchain.postTransactions(transactionsWithoutType2, false)
       const transactions = blockchain.transactionPool.getTransactions(0, 200)
 
-      expect(transactions.length).toBe(genesisBlock.transactions.length)
+      expect(transactions.length).toBe(transactionsWithoutType2.length)
 
       expect(transactions).toEqual(
-        genesisBlock.transactions.map(transaction => transaction.serialized),
+        transactionsWithoutType2.map(transaction => transaction.serialized),
       )
 
       await blockchain.transactionPool.flush()
@@ -282,9 +300,9 @@ describe('Blockchain', () => {
 
       expect(mockLoggerDebug).toHaveBeenCalled()
 
-      const debugMessage = `Blockchain not ready to accept new block at height ${
-        lastBlock.data.height
-      }. Last block: ${lastBlock.data.height - 2} :warning:`
+      const debugMessage = `Blockchain not ready to accept new block at height ${lastBlock.data.height.toLocaleString()}. Last block: ${(
+        lastBlock.data.height - 2
+      ).toLocaleString()} :warning:`
       expect(mockLoggerDebug).toHaveBeenLastCalledWith(debugMessage)
 
       expect(blockchain.getLastBlock().data.height).toBe(
@@ -299,21 +317,37 @@ describe('Blockchain', () => {
     })
 
     it('should get unconfirmed transactions', async () => {
+      const transactionsWithoutType2 = genesisBlock.transactions.filter(
+        tx => tx.type !== 2,
+      )
+
       await blockchain.transactionPool.flush()
-      await blockchain.postTransactions(genesisBlock.transactions, false)
+      await blockchain.postTransactions(transactionsWithoutType2, false)
       const unconfirmedTransactions = await blockchain.getUnconfirmedTransactions(
         200,
       )
 
       expect(unconfirmedTransactions.transactions.length).toBe(
-        genesisBlock.transactions.length,
+        transactionsWithoutType2.length,
       )
 
       expect(unconfirmedTransactions.transactions).toEqual(
-        genesisBlock.transactions.map(transaction => transaction.serialized),
+        transactionsWithoutType2.map(transaction => transaction.serialized),
       )
 
       await blockchain.transactionPool.flush()
+    })
+  })
+
+  describe('getLastBlock', () => {
+    it('should be a function', () => {
+      expect(blockchain.getLastBlock).toBeFunction()
+    })
+
+    it('should be ok', () => {
+      blockchain.state.setLastBlock(genesisBlock)
+
+      expect(blockchain.getLastBlock()).toEqual(genesisBlock)
     })
   })
 
@@ -335,14 +369,16 @@ describe('Blockchain', () => {
       })
     })
 
-    describe.skip('without a block param', () => {
+    describe('without a block param', () => {
       it('should use the last block', () => {
-        blockchain.getLastBlock = jest.fn(() => ({
-          timestamp: slots.getTime() - genesisBlock.timestamp,
-          height: genesisBlock.height,
-        }))
+        blockchain.getLastBlock = jest.fn().mockReturnValueOnce({
+          data: {
+            timestamp: slots.getTime(),
+            height: genesisBlock.height,
+          },
+        })
         expect(blockchain.isSynced()).toBeTrue()
-        expect(blockchain.getLastBlock()).toHaveBeenCalledWith(true)
+        expect(blockchain.getLastBlock).toHaveBeenCalled()
       })
     })
   })
@@ -365,27 +401,17 @@ describe('Blockchain', () => {
       })
     })
 
-    describe.skip('without a block param', () => {
+    describe('without a block param', () => {
       it('should use the last block', () => {
-        blockchain.getLastBlock = jest.fn(() => ({
-          timestamp: slots.getTime() - genesisBlock.timestamp,
-          height: genesisBlock.height,
-        }))
+        blockchain.getLastBlock = jest.fn().mockReturnValueOnce({
+          data: {
+            timestamp: slots.getTime(),
+            height: genesisBlock.height,
+          },
+        })
         expect(blockchain.isRebuildSynced()).toBeTrue()
-        expect(blockchain.getLastBlock()).toHaveBeenCalledWith(true)
+        expect(blockchain.getLastBlock).toHaveBeenCalled()
       })
-    })
-  })
-
-  describe('getLastBlock', () => {
-    it('should be a function', () => {
-      expect(blockchain.getLastBlock).toBeFunction()
-    })
-
-    it('should be ok', () => {
-      blockchain.state.setLastBlock(genesisBlock)
-
-      expect(blockchain.getLastBlock()).toEqual(genesisBlock)
     })
   })
 
@@ -486,6 +512,10 @@ async function __start() {
   }
 }
 
+async function __resetBlocksInCurrentRound() {
+  blockchain.database.blocksInCurrentRound = await blockchain.database.__getBlocksForRound()
+}
+
 async function __resetToHeight1() {
   const lastBlock = await blockchain.database.getLastBlock()
   if (lastBlock) {
@@ -504,6 +534,7 @@ async function __resetToHeight1() {
     blockchain.state.clear()
 
     blockchain.state.setLastBlock(lastBlock)
+    await __resetBlocksInCurrentRound(lastBlock)
     await blockchain.removeBlocks(lastBlock.data.height - 1)
   }
 }

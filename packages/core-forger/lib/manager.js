@@ -1,14 +1,17 @@
+/* eslint no-await-in-loop: "off" */
+
 const delay = require('delay')
 
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const logger = container.resolvePlugin('logger')
-const config = container.resolvePlugin('config')
+const logger = app.resolvePlugin('logger')
+const config = app.resolvePlugin('config')
 
 const { slots } = require('@arkecosystem/crypto')
 const { Delegate, Transaction } = require('@arkecosystem/crypto').models
 
-const { isEmpty, uniq } = require('lodash')
+const isEmpty = require('lodash/isEmpty')
+const uniq = require('lodash/uniq')
 const pluralize = require('pluralize')
 
 const Client = require('./client')
@@ -60,7 +63,11 @@ module.exports = class ForgerManager {
     )
 
     logger.debug(
-      `Loaded ${pluralize('delegate', delegates.length, true)}: ${delegates.join(', ')}`,
+      `Loaded ${pluralize(
+        'delegate',
+        delegates.length,
+        true,
+      )}: ${delegates.join(', ')}`,
     )
 
     return this.delegates
@@ -237,11 +244,11 @@ module.exports = class ForgerManager {
       )
     } else {
       logger.debug(
-        `Received ${
-          pluralize('transaction', transactions.length, true)
-        } from the pool containing ${
-          response.poolSize
-        } :money_with_wings:`,
+        `Received ${pluralize(
+          'transaction',
+          transactions.length,
+          true,
+        )} from the pool containing ${response.poolSize} :money_with_wings:`,
       )
     }
 

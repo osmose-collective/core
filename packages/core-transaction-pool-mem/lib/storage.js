@@ -47,20 +47,28 @@ class Storage {
     }
 
     const insertStatement = this.db.prepare(
-      `INSERT INTO ${this.table} `
-        + '(sequence, id, serialized) VALUES '
-        + '(:sequence, :id, :serialized);',
+      `INSERT INTO ${this.table} ` +
+        '(sequence, id, serialized) VALUES ' +
+        '(:sequence, :id, :serialized);',
     )
 
-    this.db.prepare('BEGIN;').run()
+    try {
+      this.db.prepare('BEGIN;').run()
 
-    data.forEach(d => insertStatement.run({
-      sequence: d.sequence,
-      id: d.transaction.id,
-      serialized: Buffer.from(d.transaction.serialized, 'hex'),
-    }))
+      data.forEach(d =>
+        insertStatement.run({
+          sequence: d.sequence,
+          id: d.transaction.id,
+          serialized: Buffer.from(d.transaction.serialized, 'hex'),
+        }),
+      )
 
-    this.db.prepare('COMMIT;').run()
+      this.db.prepare('COMMIT;').run()
+    } finally {
+      if (this.db.inTransaction) {
+        this.db.prepare('ROLLBACK;').run()
+      }
+    }
   }
 
   /**
@@ -95,9 +103,11 @@ class Storage {
         };`,
       )
       .all()
-    return rows.map(
-      r => new MemPoolTransaction(new Transaction(r.serialized), r.sequence),
-    )
+
+    return rows
+      .map(r => ({ tx: new Transaction(r.serialized), ...r }))
+      .filter(r => r.tx.verified)
+      .map(r => new MemPoolTransaction(r.tx, r.sequence))
   }
 
   /**

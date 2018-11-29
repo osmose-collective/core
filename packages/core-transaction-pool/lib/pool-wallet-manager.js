@@ -1,10 +1,10 @@
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 const { Wallet } = require('@arkecosystem/crypto').models
 const { WalletManager } = require('@arkecosystem/core-database')
 
-const logger = container.resolvePlugin('logger')
-const database = container.resolvePlugin('database')
-const config = container.resolvePlugin('config')
+const logger = app.resolvePlugin('logger')
+const database = app.resolvePlugin('database')
+const config = app.resolvePlugin('config')
 const { crypto } = require('@arkecosystem/crypto')
 const { TRANSACTION_TYPES } = require('@arkecosystem/crypto').constants
 
@@ -72,15 +72,9 @@ module.exports = class PoolWalletManager extends WalletManager {
     /* eslint padded-blocks: "off" */
     const { data } = transaction
     const { type, asset, recipientId, senderPublicKey } = data
+    const errors = []
 
     const sender = this.findByPublicKey(senderPublicKey)
-    let recipient = recipientId ? this.findByAddress(recipientId) : null
-
-    if (!recipient && recipientId) {
-      // cold wallet
-      recipient = new Wallet(recipientId)
-      this.setByAddress(recipientId, recipient)
-    }
 
     if (
       type === TRANSACTION_TYPES.DELEGATE_REGISTRATION &&
@@ -92,6 +86,7 @@ module.exports = class PoolWalletManager extends WalletManager {
         }: delegate name already taken.`,
         JSON.stringify(data),
       )
+
       throw new Error(
         `[PoolWalletManager] Can't apply transaction ${
           data.id
@@ -110,6 +105,7 @@ module.exports = class PoolWalletManager extends WalletManager {
         } does not exist.`,
         JSON.stringify(data),
       )
+
       throw new Error(
         `[PoolWalletManager] Can't apply transaction ${data.id}: delegate ${
           asset.votes[0]
@@ -120,12 +116,11 @@ module.exports = class PoolWalletManager extends WalletManager {
         'Transaction forcibly applied because it has been added as an exception:',
         data,
       )
-    } else if (!sender.canApply(data)) {
-      logger.error(
-        `[PoolWalletManager] Can't apply transaction for ${
-          sender.address
-        }: ${JSON.stringify(data)}`,
-      )
+    } else if (!sender.canApply(data, errors)) {
+      const message = `[PoolWalletManager] Can't apply transaction id:${
+        data.id
+      } from sender:${sender.address} due to ${JSON.stringify(errors)}`
+      logger.error(message)
       logger.debug(
         `[PoolWalletManager] Audit: ${JSON.stringify(
           sender.auditApply(data),
@@ -133,12 +128,14 @@ module.exports = class PoolWalletManager extends WalletManager {
           2,
         )}`,
       )
-      throw new Error(`[PoolWalletManager] Can't apply transaction ${data.id}`)
+
+      throw new Error(message)
     }
 
     sender.applyTransactionToSender(data)
 
-    if (recipient && type === TRANSACTION_TYPES.TRANSFER) {
+    if (type === TRANSACTION_TYPES.TRANSFER) {
+      const recipient = this.findByAddress(recipientId)
       recipient.applyTransactionToRecipient(data)
     }
 
@@ -157,5 +154,34 @@ module.exports = class PoolWalletManager extends WalletManager {
       const delegateWallet = this.findByPublicKey(block.data.generatorPublicKey)
       delegateWallet.applyBlock(block.data)
     }
+  }
+
+  /**
+   * Checks if the transaction can be applied.
+   * @param  {Object|Transaction} transaction
+   * @param  {Array} errors The errors are written into the array.
+   * @return {Boolean}
+   */
+  canApply(transaction, errors) {
+    // Edge case if sender is unknown and has no balance.
+    // NOTE: Check is performed against the database wallet manager.
+    if (!database.walletManager.byPublicKey[transaction.senderPublicKey]) {
+      const senderAddress = crypto.getAddress(
+        transaction.senderPublicKey,
+        config.network.pubKeyHash,
+      )
+
+      if (
+        database.walletManager.findByAddress(senderAddress).balance.isZero()
+      ) {
+        errors.push(
+          'Cold wallet is not allowed to send until receiving transaction is confirmed.',
+        )
+        return false
+      }
+    }
+
+    const sender = this.findByPublicKey(transaction.senderPublicKey)
+    return sender.canApply(transaction, errors)
   }
 }

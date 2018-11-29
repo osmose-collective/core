@@ -1,21 +1,23 @@
-const axios = require('axios')
-const container = require('@arkecosystem/core-container')
+/* eslint no-await-in-loop: "off" */
 
-const logger = container.resolvePlugin('logger')
+const axios = require('axios')
+const app = require('@arkecosystem/core-container')
+
+const logger = app.resolvePlugin('logger')
 const database = require('./database')
 
-const emitter = container.resolvePlugin('event-emitter')
+const emitter = app.resolvePlugin('event-emitter')
 
 class WebhookManager {
   /**
-   * Set up the webhook container.
+   * Set up the webhook app.
    * @param  {Object} config
    * @return {void}
    */
   async setUp(config) {
     this.config = config
 
-    for (const event of container.resolvePlugin('blockchain').getEvents()) {
+    for (const event of app.resolvePlugin('blockchain').getEvents()) {
       emitter.on(event, async payload => {
         const webhooks = await database.findByEvent(event)
 

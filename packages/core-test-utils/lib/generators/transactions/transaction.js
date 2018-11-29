@@ -12,10 +12,11 @@ module.exports = (
   network,
   type,
   passphrase,
-  address,
+  addressOrPublicKey,
   amount = 2,
   quantity = 10,
   getStruct = false,
+  fee,
 ) => {
   network = network || 'testnet'
   type = type || TRANSFER
@@ -31,39 +32,65 @@ module.exports = (
     throw new Error('Invalid transaction type')
   }
 
+  let secondPassphrase
+  if (Array.isArray(passphrase)) {
+    secondPassphrase = passphrase[1]
+    passphrase = passphrase[0]
+  }
+
   client.getConfigManager().setFromPreset('ark', network)
-  address = address || crypto.getAddress(crypto.getKeys(passphrase).publicKey)
 
   const transactions = []
   for (let i = 0; i < quantity; i++) {
     let builder = client.getBuilder()
     switch (type) {
-      case TRANSFER:
+      case TRANSFER: {
+        if (!addressOrPublicKey) {
+          addressOrPublicKey = crypto.getAddress(
+            crypto.getKeys(passphrase).publicKey,
+          )
+        }
         builder = builder
           .transfer()
-          .recipientId(address)
+          .recipientId(addressOrPublicKey)
           .amount(amount)
           .vendorField(`Test Transaction ${i + 1}`)
         break
-      case SECOND_SIGNATURE:
+      }
+      case SECOND_SIGNATURE: {
         builder = builder.secondSignature().signatureAsset(passphrase)
         break
-      case DELEGATE_REGISTRATION:
+      }
+      case DELEGATE_REGISTRATION: {
         const username = superheroes
           .random()
           .toLowerCase()
           .replace(/[^a-z0-9]/g, '_')
+          .substring(0, 20)
         builder = builder.delegateRegistration().usernameAsset(username)
         break
-      case VOTE:
-        const publicKey = crypto.getKeys(passphrase).publicKey
-        builder = builder.vote().votesAsset([`+${publicKey}`])
+      }
+      case VOTE: {
+        if (!addressOrPublicKey) {
+          addressOrPublicKey = crypto.getKeys(passphrase).publicKey
+        }
+        builder = builder.vote().votesAsset([`+${addressOrPublicKey}`])
         break
-      default:
+      }
+      default: {
         throw new Error('Invalid transaction type')
+      }
+    }
+
+    if (fee) {
+      builder = builder.fee(fee)
     }
 
     builder = builder.sign(passphrase)
+
+    if (secondPassphrase) {
+      builder = builder.secondSign(secondPassphrase)
+    }
     const transaction = getStruct ? builder.getStruct() : builder.build()
 
     transactions.push(transaction)

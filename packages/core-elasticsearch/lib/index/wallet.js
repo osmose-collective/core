@@ -1,8 +1,10 @@
-const container = require('@arkecosystem/core-container')
+/* eslint no-await-in-loop: "off" */
 
-const emitter = container.resolvePlugin('event-emitter')
-const database = container.resolvePlugin('database')
-const logger = container.resolvePlugin('logger')
+const app = require('@arkecosystem/core-container')
+
+const emitter = app.resolvePlugin('event-emitter')
+const database = app.resolvePlugin('database')
+const logger = app.resolvePlugin('logger')
 const Index = require('./index')
 const client = require('../services/client')
 

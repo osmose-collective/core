@@ -1,7 +1,7 @@
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 const formatTimestamp = require('../lib/format-timestamp')
 
-container.resolvePlugin = jest.fn(plugin => {
+app.resolvePlugin = jest.fn(plugin => {
   if (plugin === 'config') {
     return {
       getConstants: () => ({
@@ -25,6 +25,6 @@ describe('Format Timestamp', () => {
   })
 
   it('should compute the correct human value', () => {
-    expect(formatTimestamp(100).human).toBe('2017-03-21T13:01:40Z')
+    expect(formatTimestamp(100).human).toBe('2017-03-21T13:01:40.000Z')
   })
 })

@@ -42,7 +42,7 @@ describe('Models - Wallet', () => {
       Object.keys(data).forEach(k => {
         testWallet[k] = data[k]
       })
-      expect(testWallet.canApply(multiTx)).toBeTrue()
+      expect(testWallet.canApply(multiTx, [])).toBeTrue()
     })
   })
 
@@ -75,23 +75,6 @@ describe('Models - Wallet', () => {
       expect(testWallet.forgedFees).toEqual(block.totalFee)
       expect(testWallet.forgedRewards).toEqual(block.totalFee)
       expect(testWallet.lastBlock).toBeObject(block)
-      expect(testWallet.dirty).toBeTrue()
-    })
-
-    // Doesn't make sense anymore?
-    it.skip('should apply correct block with string values', () => {
-      const originalBlock = Object.assign({}, block)
-      block.reward += ''
-      block.totalFee += ''
-      block.reward += ''
-      testWallet.applyBlock(block)
-      expect(testWallet.balance).toBe(
-        originalBlock.reward + originalBlock.totalFee,
-      )
-      expect(testWallet.producedBlocks).toBe(1)
-      expect(testWallet.forgedFees).toBe(originalBlock.totalFee)
-      expect(testWallet.forgedRewards).toBe(originalBlock.totalFee)
-      expect(testWallet.lastBlock).toBeObject(originalBlock)
       expect(testWallet.dirty).toBeTrue()
     })
 

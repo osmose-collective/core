@@ -1,9 +1,11 @@
 const axios = require('axios')
+const chunk = require('lodash/chunk')
 const util = require('util')
-const container = require('@arkecosystem/core-container')
+const dayjs = require('dayjs-ext')
+const app = require('@arkecosystem/core-container')
 
-const logger = container.resolvePlugin('logger')
-const config = container.resolvePlugin('config')
+const logger = app.resolvePlugin('logger')
+const config = app.resolvePlugin('config')
 
 module.exports = class Peer {
   /**
@@ -18,13 +20,30 @@ module.exports = class Peer {
     this.url = `${port % 443 === 0 ? 'https://' : 'http://'}${ip}:${port}`
     this.state = {}
     this.offences = []
+    this.lastPinged = null
 
     this.headers = {
-      version: container.resolveOptions('blockchain').version,
-      port: container.resolveOptions('p2p').port,
+      version: app.getVersion(),
+      port: app.resolveOptions('p2p').port,
       nethash: config.network.nethash,
       height: null,
+      'Content-Type': 'application/json',
     }
+
+    if (config.network.name !== 'mainnet') {
+      this.headers.hashid = app.getHashid()
+    }
+  }
+
+  /**
+   * Set the given headers for the peer.
+   * @param  {Object} headers
+   * @return {void}
+   */
+  setHeaders(headers) {
+    ;['nethash', 'os', 'version'].forEach(key => {
+      this[key] = headers[key]
+    })
   }
 
   /**
@@ -32,15 +51,26 @@ module.exports = class Peer {
    * @return {Object}
    */
   toBroadcastInfo() {
-    return {
+    const data = {
       ip: this.ip,
       port: +this.port,
+      nethash: this.nethash,
       version: this.version,
       os: this.os,
       status: this.status,
       height: this.state.height,
       delay: this.delay,
     }
+
+    if (config.network.name !== 'mainnet') {
+      data.hashid = this.hashid || 'unknown'
+    }
+
+    return data
+  }
+
+  static isOk(peer) {
+    return peer.status === 200 || peer.status === 'OK'
   }
 
   /**
@@ -65,17 +95,22 @@ module.exports = class Peer {
    * @return {(Object|undefined)}
    */
   async postTransactions(transactions) {
-    return this.__post(
-      '/peer/transactions',
-      {
-        transactions,
-        isBroadCasted: true,
-      },
-      {
-        headers: this.headers,
-        timeout: 8000,
-      },
-    )
+    try {
+      const response = await this.__post(
+        '/peer/transactions',
+        {
+          transactions,
+        },
+        {
+          headers: this.headers,
+          timeout: 8000,
+        },
+      )
+
+      return response
+    } catch (err) {
+      throw err
+    }
   }
 
   async getTransactionsFromIds(ids) {
@@ -103,7 +138,7 @@ module.exports = class Peer {
       const response = await axios.get(`${this.url}/peer/blocks`, {
         params: { lastBlockHeight: fromBlockHeight },
         headers: this.headers,
-        timeout: 60000,
+        timeout: 10000,
       })
 
       this.__parseHeaders(response)
@@ -131,24 +166,38 @@ module.exports = class Peer {
   }
 
   /**
-   * Perform ping request on peer.
+   * Perform ping request on this peer if it has not been
+   * recently pinged.
    * @param  {Number} [delay=5000]
+   * @param  {Boolean} force
    * @return {Object}
    * @throws {Error} If fail to get peer status.
    */
-  async ping(delay) {
+  async ping(delay, force = false) {
+    if (this.recentlyPinged() && !force) {
+      return
+    }
+
     const body = await this.__get(
       '/peer/status',
       delay || config.peers.globalTimeout,
     )
 
-    if (body) {
-      this.state = body
-
-      return body
+    if (!body) {
+      throw new Error(`Peer ${this.ip} is unresponsive`)
     }
 
-    throw new Error(`Peer ${this.ip} is unresponsive`)
+    this.lastPinged = dayjs()
+    this.state = body
+    return body
+  }
+
+  /**
+   * Returns true if this peer was pinged the past 2 minutes.
+   * @return {Boolean}
+   */
+  recentlyPinged() {
+    return !!this.lastPinged && dayjs().diff(this.lastPinged, 'm') < 2
   }
 
   /**
@@ -256,7 +305,7 @@ module.exports = class Peer {
    * @return {Object}
    */
   __parseHeaders(response) {
-    ;['nethash', 'os', 'version'].forEach(key => {
+    ;['nethash', 'os', 'version', 'hashid'].forEach(key => {
       this[key] = response.headers[key] || this[key]
     })
 
@@ -267,9 +316,5 @@ module.exports = class Peer {
     this.status = response.status
 
     return response
-  }
-
-  static isOk(peer) {
-    return peer.status === 200 || peer.status === 'OK'
   }
 }

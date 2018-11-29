@@ -1,5 +1,4 @@
 module.exports = {
-  version: '2.0.0',
   fastRebuild: false,
   databaseRollback: {
     maxBlockRewind: 10000,
@@ -7,5 +6,6 @@ module.exports = {
   },
   state: {
     maxLastBlocks: 100,
+    maxLastTransactionIds: 10000,
   },
 }

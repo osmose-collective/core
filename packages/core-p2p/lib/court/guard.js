@@ -1,11 +1,12 @@
-const container = require('@arkecosystem/core-container')
-
-const config = container.resolvePlugin('config')
-const logger = container.resolvePlugin('logger')
-
-const moment = require('moment')
+const app = require('@arkecosystem/core-container')
+const dayjs = require('dayjs-ext')
+const head = require('lodash/head')
+const prettyMs = require('pretty-ms')
 const semver = require('semver')
-const { head, sumBy } = require('lodash')
+const sumBy = require('lodash/sumBy')
+
+const config = app.resolvePlugin('config')
+const logger = app.resolvePlugin('logger')
 
 const isMyself = require('../utils/is-myself')
 const offences = require('./offences')
@@ -54,7 +55,7 @@ class Guard {
     }
 
     if (peer.offences.length > 0) {
-      if (moment().isAfter(head(peer.offences).until)) {
+      if (dayjs().isAfter(head(peer.offences).until)) {
         peer.offences = []
       }
     }
@@ -84,12 +85,13 @@ class Guard {
 
     // Don't unsuspend critical offenders before the ban is expired.
     if (peer.offences.some(offence => offence.critical)) {
-      if (moment().isBefore(this.suspensions[peer.ip].until)) {
+      if (dayjs().isBefore(this.suspensions[peer.ip].until)) {
         return
       }
     }
 
     delete this.suspensions[peer.ip]
+    delete peer.nextSuspensionReminder
 
     await this.monitor.acceptNewPeer(peer)
   }
@@ -101,7 +103,9 @@ class Guard {
   async resetSuspendedPeers() {
     logger.info('Clearing suspended peers.')
     await Promise.all(
-      Object.values(this.suspensions).map(suspension => this.unsuspend(suspension.peer)),
+      Object.values(this.suspensions).map(suspension =>
+        this.unsuspend(suspension.peer),
+      ),
     )
   }
 
@@ -113,17 +117,24 @@ class Guard {
   isSuspended(peer) {
     const suspendedPeer = this.get(peer.ip)
 
-    if (suspendedPeer && moment().isBefore(suspendedPeer.until)) {
-      const untilDiff = moment.duration(suspendedPeer.until.diff(moment.now()))
+    if (suspendedPeer && dayjs().isBefore(suspendedPeer.until)) {
+      const nextSuspensionReminder = suspendedPeer.nextSuspensionReminder
 
-      logger.debug(
-        `${peer.ip} still suspended for ${untilDiff.humanize()} because of "${
-          suspendedPeer.reason
-        }".`,
-      )
+      if (!nextSuspensionReminder || dayjs().isAfter(nextSuspensionReminder)) {
+        const untilDiff = suspendedPeer.until.diff(dayjs())
+
+        logger.debug(
+          `${peer.ip} still suspended for ${prettyMs(untilDiff, {
+            verbose: true,
+          })} because of "${suspendedPeer.reason}".`,
+        )
+
+        suspendedPeer.nextSuspensionReminder = dayjs().add(5, 'm')
+      }
 
       return true
     }
+
     if (suspendedPeer) {
       delete this.suspensions[peer.ip]
     }
@@ -155,7 +166,8 @@ class Guard {
    * @return {Boolean}
    */
   isValidVersion(peer) {
-    return semver.satisfies(peer.version, config.peers.minimumVersion)
+    const version = peer.version || (peer.headers && peer.headers.version)
+    return semver.satisfies(version, config.peers.minimumVersion)
   }
 
   /**
@@ -164,7 +176,8 @@ class Guard {
    * @return {Boolean}
    */
   isValidNetwork(peer) {
-    return peer.nethash === config.network.nethash
+    const nethash = peer.nethash || (peer.headers && peer.headers.nethash)
+    return nethash === config.network.nethash
   }
 
   /**
@@ -173,7 +186,7 @@ class Guard {
    * @return {Boolean}
    */
   isValidPort(peer) {
-    return peer.port === container.resolveOptions('p2p').port
+    return peer.port === app.resolveOptions('p2p').port
   }
 
   /**
@@ -197,7 +210,7 @@ class Guard {
   /**
    * Decide for how long the peer should be banned.
    * @param  {Peer}  peer
-   * @return {moment}
+   * @return {dayjs}
    */
   __determineOffence(peer) {
     if (this.isBlacklisted(peer)) {
@@ -205,7 +218,7 @@ class Guard {
     }
 
     try {
-      const state = container.resolve('state')
+      const state = app.resolve('state')
 
       if (state.forkedBlock && peer.ip === state.forkedBlock.ip) {
         return this.__determinePunishment(peer, offences.FORK)
@@ -238,7 +251,7 @@ class Guard {
       return this.__determinePunishment(peer, offences.TOO_MANY_REQUESTS)
     }
 
-    if (peer.status !== 200) {
+    if (peer.status && peer.status !== 200) {
       return this.__determinePunishment(peer, offences.INVALID_STATUS)
     }
 
@@ -282,15 +295,13 @@ class Guard {
       offence = offences.REPEAT_OFFENDER
     }
 
-    const until = moment()
-      .utc()
-      .add(offence.number, offence.period)
-    const untilDiff = moment.duration(until.diff(moment.now()))
+    const until = dayjs().add(offence.number, offence.period)
+    const untilDiff = until.diff(dayjs())
 
     logger.debug(
-      `Suspended ${peer.ip} for ${untilDiff.humanize()} because of "${
-        offence.reason
-      }"`,
+      `Suspended ${peer.ip} for ${prettyMs(untilDiff, {
+        verbose: true,
+      })} because of "${offence.reason}"`,
     )
 
     return {

@@ -1,4 +1,8 @@
-const { createServer, mountServer } = require('@arkecosystem/core-http-utils')
+const {
+  createServer,
+  mountServer,
+  plugins,
+} = require('@arkecosystem/core-http-utils')
 
 /**
  * Create a new hapi.js server.
@@ -10,6 +14,9 @@ module.exports = async (p2p, config) => {
     host: config.host,
     port: config.port,
   })
+
+  // TODO: enable after mainnet migration
+  // await server.register({ plugin: plugins.contentType })
 
   await server.register({
     plugin: require('hapi-rate-limit'),
@@ -40,6 +47,7 @@ module.exports = async (p2p, config) => {
         '/peer/status',
         '/peer/blocks',
         '/peer/transactions',
+        '/peer/getTransactionsFromIds',
         '/internal/round',
         '/internal/blocks',
         '/internal/forgingTransactions',
@@ -47,6 +55,22 @@ module.exports = async (p2p, config) => {
         '/internal/syncCheck',
         '/internal/usernames',
         '/remote/blockchain/{event}',
+      ],
+    },
+  })
+
+  await server.register({
+    plugin: plugins.corsHeaders,
+  })
+
+  await server.register({
+    plugin: plugins.transactionPayload,
+    options: {
+      routes: [
+        {
+          method: 'POST',
+          path: '/peer/transactions',
+        },
       ],
     },
   })
@@ -65,20 +89,10 @@ module.exports = async (p2p, config) => {
     routes: { prefix: '/config' },
   })
 
-  // ARK_V2 process variable enables V2-specific behavior
-  // Here defining which version is behind /peer endpoint
-
-  if (process.env.ARK_V2) {
-    await server.register({
-      plugin: require('./versions/peer'),
-      routes: { prefix: '/peer' },
-    })
-  } else {
-    await server.register({
-      plugin: require('./versions/1'),
-      routes: { prefix: '/peer' },
-    })
-  }
+  await server.register({
+    plugin: require('./versions/1'),
+    routes: { prefix: '/peer' },
+  })
 
   await server.register({
     plugin: require('./versions/internal'),

@@ -1,18 +1,15 @@
 {
   "name": "@arkecosystem/core-error-tracker-bugsnag",
   "description": "Bugsnag error tracker integration for Ark Core.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "contributors": [
     "Brian Faust <brian@ark.io>"
   ],
   "license": "MIT",
   "main": "lib/index.js",
   "scripts": {
-    "flow:coverage": "flow-coverage-report --config ../../.flowcoverage.json",
-    "flow:check": "flow check ./lib",
-    "flow:deps": "flow-typed install",
     "lint": "eslint ./ --fix",
-    "depcheck": "depcheck ./ --ignores=flow-bin"
+    "depcheck": "depcheck ./"
   },
   "dependencies": {
     "bugsnag": "^2.4.3"
@@ -22,8 +19,5 @@
   },
   "engines": {
     "node": ">=10.x"
-  },
-  "devDependencies": {
-    "flow-bin": "^0.86.0"
   }
 }

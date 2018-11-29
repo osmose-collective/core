@@ -1,15 +1,19 @@
 /* eslint max-len: "off" */
 
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const logger = container.resolvePlugin('logger')
+const logger = app.resolvePlugin('logger')
 const immutable = require('immutable')
 const assert = require('assert')
 const blockchainMachine = require('./machines/blockchain')
 
 // Stores the last n blocks in ascending height. The amount of last blocks
-// can be configured by the option `state.maxLastBlocks`.
+// can be configured with the option `state.maxLastBlocks`.
 let _lastBlocks = immutable.OrderedMap()
+
+// Stores the last n incoming transaction ids. The amount of transaction ids
+// can be configred with the option `state.maxLastTransactionIds`.
+let _cachedTransactionIds = immutable.OrderedSet()
 
 // Map Block instances to block data.
 const _mapToBlockData = blocks =>
@@ -50,6 +54,7 @@ class StateStorage {
    */
   clear() {
     _lastBlocks = _lastBlocks.clear()
+    _cachedTransactionIds = _cachedTransactionIds.clear()
   }
 
   /**
@@ -90,7 +95,7 @@ class StateStorage {
     // Delete oldest block if size exceeds the maximum
     if (
       _lastBlocks.size >
-      container.resolveOptions('blockchain').state.maxLastBlocks
+      app.resolveOptions('blockchain').state.maxLastBlocks
     ) {
       _lastBlocks = _lastBlocks.delete(_lastBlocks.first().data.height)
     }
@@ -102,19 +107,17 @@ class StateStorage {
    */
   getLastBlocks() {
     return _lastBlocks
-      .reverse()
       .valueSeq()
+      .reverse()
       .toArray()
   }
 
   /**
    * Get the last blocks data.
-   * @returns {Array}
+   * @returns {Seq}
    */
   getLastBlocksData() {
-    return _mapToBlockData(_lastBlocks.reverse())
-      .valueSeq()
-      .toArray()
+    return _mapToBlockData(_lastBlocks.valueSeq().reverse())
   }
 
   /**
@@ -123,9 +126,9 @@ class StateStorage {
    */
   getLastBlockIds() {
     return _lastBlocks
+      .valueSeq()
       .reverse()
       .map(b => b.data.id)
-      .valueSeq()
       .toArray()
   }
 
@@ -136,13 +139,12 @@ class StateStorage {
    */
   getLastBlocksByHeight(start, end) {
     end = end || start
-    return _mapToBlockData(
-      _lastBlocks.filter(
-        block => block.data.height >= start && block.data.height <= end,
-      ),
-    )
+
+    const blocks = _lastBlocks
       .valueSeq()
-      .toArray()
+      .filter(block => block.data.height >= start && block.data.height <= end)
+
+    return _mapToBlockData(blocks).toArray()
   }
 
   /**
@@ -150,7 +152,58 @@ class StateStorage {
    * @returns {Array}
    */
   getCommonBlocks(ids) {
-    return this.getLastBlocksData().filter(block => ids.includes(block.id))
+    return this.getLastBlocksData()
+      .filter(block => ids.includes(block.id))
+      .toArray()
+  }
+
+  /**
+   * Cache the ids of the given transactions.
+   * @param {Array} transactions
+   * @return Object {
+   *  added: array of added transactions,
+   *  notAdded: array of previously added transactions
+   * }
+   */
+  cacheTransactions(transactions) {
+    const notAdded = []
+    const added = transactions.filter(tx => {
+      if (_cachedTransactionIds.has(tx.id)) {
+        notAdded.push(tx)
+        return false
+      }
+      return true
+    })
+
+    _cachedTransactionIds = _cachedTransactionIds.withMutations(cache => {
+      added.forEach(tx => cache.add(tx.id))
+    })
+
+    // Cap the Set of last transaction ids to maxLastTransactionIds
+    const limit = app.resolveOptions('blockchain').state
+      .maxLastTransactionIds
+    if (_cachedTransactionIds.size > limit) {
+      _cachedTransactionIds = _cachedTransactionIds.takeLast(limit)
+    }
+
+    return { added, notAdded }
+  }
+
+  /**
+   * Remove the given transaction ids from the cache.
+   * @param {Array} transactionIds
+   * @returns {void}
+   */
+  removeCachedTransactionIds(transactionIds) {
+    _cachedTransactionIds = _cachedTransactionIds.subtract(transactionIds)
+  }
+
+  /**
+   * Get cached transaction ids.
+   * @returns {Array}
+   */
+  getCachedTransactionIds() {
+    return _cachedTransactionIds.toArray()
   }
 
   /**

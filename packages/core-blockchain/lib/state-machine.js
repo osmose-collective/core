@@ -1,8 +1,10 @@
-const container = require('@arkecosystem/core-container')
+/* eslint no-await-in-loop: "off" */
 
-const config = container.resolvePlugin('config')
-const emitter = container.resolvePlugin('event-emitter')
-const logger = container.resolvePlugin('logger')
+const app = require('@arkecosystem/core-container')
+
+const config = app.resolvePlugin('config')
+const emitter = app.resolvePlugin('event-emitter')
+const logger = app.resolvePlugin('logger')
 
 const { slots } = require('@arkecosystem/crypto')
 const { Block } = require('@arkecosystem/crypto').models
@@ -53,15 +55,14 @@ blockchainMachine.actionMap = blockchain => ({
   async checkLastDownloadedBlockSynced() {
     let event = 'NOTSYNCED'
     logger.debug(
-      `Queued blocks for rebuildQueue: ${blockchain.rebuildQueue.length()}`,
-    )
-    logger.debug(
-      `Queued blocks for processQueue: ${blockchain.processQueue.length()}`,
+      `Queued blocks (rebuild: ${blockchain.rebuildQueue.length()} process: ${blockchain.processQueue.length()})`,
     )
 
+    await blockchain.p2p.updateNetworkStatusIfNotEnoughPeers()
+
     if (
-      blockchain.rebuildQueue.length() > 10000
-      || blockchain.processQueue.length() > 10000
+      blockchain.rebuildQueue.length() > 10000 ||
+      blockchain.processQueue.length() > 10000
     ) {
       event = 'PAUSED'
     }
@@ -157,7 +158,7 @@ blockchainMachine.actionMap = blockchain => ({
   },
 
   exitApp() {
-    container.forceExit(
+    app.forceExit(
       'Failed to startup blockchain. Exiting Ark Core! :rotating_light:',
     )
   },
@@ -221,11 +222,13 @@ blockchainMachine.actionMap = blockchain => ({
         return blockchain.dispatch('STARTED')
       }
 
-      state.rebuild = slots.getTime() - block.data.timestamp
-        > (constants.activeDelegates + 1) * constants.blocktime
+      state.rebuild =
+        slots.getTime() - block.data.timestamp >
+        (constants.activeDelegates + 1) * constants.blocktime
       // no fast rebuild if in last week
-      state.fastRebuild = slots.getTime() - block.data.timestamp > 3600 * 24 * 7
-        && !!container.resolveOptions('blockchain').fastRebuild
+      state.fastRebuild =
+        slots.getTime() - block.data.timestamp > 3600 * 24 * 7 &&
+        !!app.resolveOptions('blockchain').fastRebuild
 
       if (process.env.NODE_ENV === 'test') {
         logger.verbose(
@@ -275,7 +278,7 @@ blockchainMachine.actionMap = blockchain => ({
         const { round } = roundCalculator.calculateRound(block.data.height + 1)
 
         logger.info(
-          `New round ${round} detected. Cleaning calculated data before restarting!`,
+          `New round ${round.toLocaleString()} detected. Cleaning calculated data before restarting!`,
         )
 
         await blockchain.database.deleteRound(round)
@@ -304,14 +307,14 @@ blockchainMachine.actionMap = blockchain => ({
       blockchain.dispatch('NOBLOCK')
     } else {
       logger.info(
-        `Downloaded ${blocks.length} new ${
-          pluralize('block', blocks.length)
-        } accounting for a total of ${
-          pluralize('transaction', blocks.reduce(
-            (sum, b) => sum + b.numberOfTransactions,
-            0,
-          ), true)
-        }`,
+        `Downloaded ${blocks.length} new ${pluralize(
+          'block',
+          blocks.length,
+        )} accounting for a total of ${pluralize(
+          'transaction',
+          blocks.reduce((sum, b) => sum + b.numberOfTransactions, 0),
+          true,
+        )}`,
       )
 
       if (blocks.length && blocks[0].previousBlock === lastBlock.data.id) {
@@ -346,14 +349,14 @@ blockchainMachine.actionMap = blockchain => ({
       blockchain.dispatch('NOBLOCK')
     } else {
       logger.info(
-        `Downloaded ${blocks.length} new ${
-          pluralize('block', blocks.length)
-        } accounting for a total of ${
-          pluralize('transaction', blocks.reduce(
-            (sum, b) => sum + b.numberOfTransactions,
-            0,
-          ), true)
-        }`,
+        `Downloaded ${blocks.length} new ${pluralize(
+          'block',
+          blocks.length,
+        )} accounting for a total of ${pluralize(
+          'transaction',
+          blocks.reduce((sum, b) => sum + b.numberOfTransactions, 0),
+          true,
+        )}`,
       )
 
       if (blocks.length && blocks[0].previousBlock === lastBlock.data.id) {
@@ -390,7 +393,7 @@ blockchainMachine.actionMap = blockchain => ({
 
     await blockchain.database.commitQueuedQueries()
 
-    let random = ~~(4 / Math.random())
+    let random = Math.floor(4 / Math.random())
 
     if (random > 102) {
       random = 102
@@ -400,6 +403,7 @@ blockchainMachine.actionMap = blockchain => ({
 
     logger.info(`Removed ${pluralize('block', random, true)} :wastebasket:`)
 
+    await blockchain.transactionPool.buildWallets()
     await blockchain.p2p.refreshPeersAfterFork()
 
     blockchain.dispatch('SUCCESS')
@@ -408,7 +412,7 @@ blockchainMachine.actionMap = blockchain => ({
   async rollbackDatabase() {
     logger.info('Trying to restore database integrity :fire_engine:')
 
-    const { maxBlockRewind, steps } = container.resolveOptions(
+    const { maxBlockRewind, steps } = app.resolveOptions(
       'blockchain',
     ).databaseRollback
     let blockchainAudit

@@ -1,3 +1,5 @@
+/* eslint no-await-in-loop: "off" */
+
 const path = require('path')
 const fs = require('fs')
 const semver = require('semver')
@@ -16,7 +18,7 @@ module.exports = class PluginRegistrars {
     this.container = container
     this.plugins = this.__loadPlugins()
     this.resolvedPlugins = []
-    this.options = options
+    this.options = this.__castOptions(options)
     this.deregister = []
   }
 
@@ -130,7 +132,7 @@ module.exports = class PluginRegistrars {
       }),
     )
 
-    if (item.plugin.hasOwnProperty('deregister')) {
+    if (item.plugin.deregister) {
       this.deregister.push({ plugin: item.plugin, options })
     }
   }
@@ -148,9 +150,30 @@ module.exports = class PluginRegistrars {
       options = Hoek.applyToDefaults(defaults, options)
     }
 
-    if (this.options.options && this.options.options.hasOwnProperty(name)) {
+    if (this.options.options && this.options.options[name]) {
       options = Hoek.applyToDefaults(options, this.options.options[name])
     }
+
+    return this.__castOptions(options)
+  }
+
+  /**
+   * When the env is used to overwrite options, we get strings even if we
+   * expect a number. This is in most cases not desired and leads to side-
+   * effects. Here is assumed all numeric strings except blacklisted ones
+   * should be treated as numbers.
+   * @param {Object} options
+   * @return {Object} options
+   */
+  __castOptions(options) {
+    const blacklist = []
+    const regex = new RegExp(/^\d+$/)
+    Object.keys(options).forEach(key => {
+      const value = options[key]
+      if (isString(value) && !blacklist.includes(key) && regex.test(value)) {
+        options[key] = +value
+      }
+    })
 
     return options
   }

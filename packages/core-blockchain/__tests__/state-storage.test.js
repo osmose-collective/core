@@ -124,7 +124,7 @@ describe('State Storage', () => {
         state.setLastBlock(blocks[i])
       }
 
-      const lastBlocksData = state.getLastBlocksData()
+      const lastBlocksData = state.getLastBlocksData().toArray()
       expect(lastBlocksData).toHaveLength(5)
 
       for (let i = 0; i < 5; i++) {
@@ -201,6 +201,82 @@ describe('State Storage', () => {
       for (let i = 0; i < commonBlocks.length; i++) {
         expect(commonBlocks[i].height).toBe(blocks[98 - i].data.height)
       }
+    })
+  })
+
+  describe('cacheTransactions', () => {
+    it('should be a function', () => {
+      expect(state.cacheTransactions).toBeFunction()
+    })
+
+    it('should add transaction id', () => {
+      expect(state.cacheTransactions([{ id: '1' }])).toEqual({
+        added: [{ id: '1' }],
+        notAdded: [],
+      })
+      expect(state.getCachedTransactionIds()).toHaveLength(1)
+    })
+
+    it('should not add duplicate transaction ids', () => {
+      expect(state.cacheTransactions([{ id: '1' }])).toEqual({
+        added: [{ id: '1' }],
+        notAdded: [],
+      })
+      expect(state.cacheTransactions([{ id: '1' }])).toEqual({
+        added: [],
+        notAdded: [{ id: '1' }],
+      })
+      expect(state.getCachedTransactionIds()).toHaveLength(1)
+    })
+
+    it('should not add more than 10000 unique transaction ids', () => {
+      const transactions = []
+      for (let i = 0; i < 10000; i++) {
+        transactions.push({ id: i.toString() })
+      }
+
+      expect(state.cacheTransactions(transactions)).toEqual({
+        added: transactions,
+        notAdded: [],
+      })
+
+      expect(state.getCachedTransactionIds()).toHaveLength(10000)
+      expect(state.getCachedTransactionIds()[0]).toEqual('0')
+
+      expect(state.cacheTransactions([{ id: '10000' }])).toEqual({
+        added: [{ id: '10000' }],
+        notAdded: [],
+      })
+      expect(state.getCachedTransactionIds()).toHaveLength(10000)
+      expect(state.getCachedTransactionIds()[0]).toEqual('1')
+    })
+  })
+
+  describe('removeCachedTransactionIds', () => {
+    it('should be a function', () => {
+      expect(state.removeCachedTransactionIds).toBeFunction()
+    })
+
+    it('should remove cached transaction ids', () => {
+      const transactions = []
+      for (let i = 0; i < 10; i++) {
+        transactions.push({ id: i.toString() })
+      }
+
+      expect(state.cacheTransactions(transactions)).toEqual({
+        added: transactions,
+        notAdded: [],
+      })
+
+      expect(state.getCachedTransactionIds()).toHaveLength(10)
+      state.removeCachedTransactionIds(transactions.map(tx => tx.id))
+      expect(state.getCachedTransactionIds()).toHaveLength(0)
+    })
+  })
+
+  describe('getCachedTransactionIds', () => {
+    it('should be a function', () => {
+      expect(state.getCachedTransactionIds).toBeFunction()
     })
   })
 

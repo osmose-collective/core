@@ -1,9 +1,9 @@
 const { crypto, slots } = require('@arkecosystem/crypto')
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const config = container.resolvePlugin('config')
-const logger = container.resolvePlugin('logger')
-const emitter = container.resolvePlugin('event-emitter')
+const config = app.resolvePlugin('config')
+const logger = app.resolvePlugin('logger')
+const emitter = app.resolvePlugin('event-emitter')
 const { Block } = require('@arkecosystem/crypto').models
 const { TRANSACTION_TYPES } = require('@arkecosystem/crypto').constants
 const { roundCalculator } = require('@arkecosystem/core-utils')
@@ -291,7 +291,7 @@ module.exports = class ConnectionInterface {
         (this.forgingDelegates.length &&
           this.forgingDelegates[0].round !== round)
       ) {
-        logger.info(`Starting Round ${round} :dove_of_peace:`)
+        logger.info(`Starting Round ${round.toLocaleString()} :dove_of_peace:`)
 
         try {
           this.updateDelegateStats(height, this.forgingDelegates)
@@ -313,7 +313,7 @@ module.exports = class ConnectionInterface {
         }
       } else {
         logger.warn(
-          `Round ${round} has already been applied. This should happen only if you are a forger. :warning:`,
+          `Round ${round.toLocaleString()} has already been applied. This should happen only if you are a forger. :warning:`,
         )
       }
     }
@@ -330,7 +330,7 @@ module.exports = class ConnectionInterface {
     )
 
     if (nextRound === round + 1 && height >= maxDelegates) {
-      logger.info(`Back to previous round: ${round} :back:`)
+      logger.info(`Back to previous round: ${round.toLocaleString()} :back:`)
 
       const delegates = await this.__calcPreviousActiveDelegates(round)
       this.forgingDelegates = await this.getActiveDelegates(height, delegates)
@@ -382,7 +382,7 @@ module.exports = class ConnectionInterface {
    */
   async validateDelegate(block) {
     if (this.__isException(block.data)) {
-      return true
+      return
     }
 
     const delegates = await this.getActiveDelegates(block.data.height)
@@ -418,17 +418,22 @@ module.exports = class ConnectionInterface {
         }) allowed to forge block ${block.data.height.toLocaleString()} :+1:`,
       )
     }
-
-    return true
   }
 
   /**
    * Validate a forked block.
    * @param  {Block} block
-   * @return {void}
+   * @return {Boolean}
    */
   async validateForkedBlock(block) {
-    await this.validateDelegate(block)
+    try {
+      await this.validateDelegate(block)
+    } catch (error) {
+      logger.debug(error.stack)
+      return false
+    }
+
+    return true
   }
 
   /**
@@ -484,15 +489,7 @@ module.exports = class ConnectionInterface {
     await this.revertRound(block.data.height)
     await this.walletManager.revertBlock(block)
 
-    if (this.blocksInCurrentRound) {
-      this.blocksInCurrentRound.pop()
-      // COMMENTED OUT: needs to be sure is properly synced
-      // if (b.data.id !== block.data.id) {
-      //   logger.debug(`block to revert: ${JSON.stringify(b.data)}`)
-      //   logger.debug(`reverted block: ${JSON.stringify(block.data)}`)
-      //   throw new Error('Reverted wrong block. Restart is needed 💣')
-      // }
-    }
+    assert(this.blocksInCurrentRound.pop().data.id === block.data.id)
 
     emitter.emit('block.reverted', block.data)
   }
@@ -517,7 +514,7 @@ module.exports = class ConnectionInterface {
 
     const dbTransaction = await this.getTransaction(transaction.data.id)
 
-    return sender.canApply(transaction.data) && !dbTransaction
+    return sender.canApply(transaction.data, []) && !dbTransaction
   }
 
   /**
@@ -527,8 +524,8 @@ module.exports = class ConnectionInterface {
    */
   async __getBlocksForRound(round) {
     let lastBlock
-    if (container.has('state')) {
-      lastBlock = container.resolve('state').getLastBlock()
+    if (app.has('state')) {
+      lastBlock = app.resolve('state').getLastBlock()
     } else {
       lastBlock = await this.getLastBlock()
     }
@@ -545,8 +542,7 @@ module.exports = class ConnectionInterface {
     const maxDelegates = config.getConstants(height).activeDelegates
     height = round * maxDelegates + 1
 
-    const blocks = await this.getBlocks(height - maxDelegates, maxDelegates)
-
+    const blocks = await this.getBlocks(height - maxDelegates, maxDelegates - 1)
     return blocks.map(b => new Block(b))
   }
 
@@ -561,7 +557,7 @@ module.exports = class ConnectionInterface {
   }
 
   /**
-   * Register the wallet container.
+   * Register the wallet app.
    * @return {void}
    */
   async _registerWalletManager() {

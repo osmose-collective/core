@@ -1,7 +1,7 @@
 {
   "name": "@arkecosystem/core-json-rpc",
   "description": "A JSON-RPC 2.0 Specification compliant server to interact with the Ark Blockchain.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "contributors": [
     "François-Xavier Thoorens <fx@ark.io>",
     "Brian Faust <brian@ark.io>"
@@ -14,33 +14,29 @@
     "test:debug": "cross-env ARK_ENV=test node --inspect-brk ../../node_modules/.bin/jest --runInBand",
     "test:watch": "cross-env ARK_ENV=test jest --runInBand --watch",
     "test:watch:all": "cross-env ARK_ENV=test jest --runInBand --watchAll",
-    "flow:coverage": "flow-coverage-report --config ../../.flowcoverage.json",
-    "flow:check": "flow check ./lib",
-    "flow:deps": "flow-typed install",
     "lint": "eslint ./ --fix",
-    "depcheck": "depcheck ./ --ignores=flow-bin,@keyv/sqlite"
+    "depcheck": "depcheck ./ --ignores=@keyv/sqlite,lodash,lodash.*"
   },
   "dependencies": {
-    "@arkecosystem/core-container": "^0.1.1",
-    "@arkecosystem/core-http-utils": "^0.1.0",
-    "@arkecosystem/crypto": "^0.2.4",
+    "@arkecosystem/core-container": "~0.2",
+    "@arkecosystem/core-http-utils": "~0.2",
+    "@arkecosystem/crypto": "~0.2",
     "@keyv/sqlite": "^2.0.0",
     "axios": "^0.18.0",
     "bip38": "^2.0.2",
     "bip39": "^2.5.0",
-    "boom": "^7.2.2",
+    "boom": "^7.3.0",
     "is-reachable": "^2.4.0",
-    "joi": "^14.0.4",
+    "joi": "^14.3.0",
     "keyv": "^3.1.0",
-    "lodash": "^4.17.11",
+    "lodash.get": "^4.4.2",
     "uuid": "^3.3.2",
     "wif": "^2.0.6"
   },
   "devDependencies": {
-    "@arkecosystem/core-p2p": "^0.1.1",
-    "@arkecosystem/core-test-utils": "^0.1.1",
-    "axios-mock-adapter": "^1.15.0",
-    "flow-bin": "^0.86.0"
+    "@arkecosystem/core-p2p": "~0.2",
+    "@arkecosystem/core-test-utils": "~0.2",
+    "axios-mock-adapter": "^1.15.0"
   },
   "publishConfig": {
     "access": "public"

@@ -1,5 +1,6 @@
-const { cloneDeepWith } = require('lodash')
+const cloneDeepWith = require('lodash/cloneDeepWith')
 const { createHash } = require('crypto')
+const pluralize = require('pluralize')
 const ByteBuffer = require('bytebuffer')
 const { Bignum } = require('../utils')
 const Transaction = require('./transaction')
@@ -78,9 +79,6 @@ module.exports = class Block {
       this.data.id = outlookTable[this.data.id]
       this.data.idHex = toBytesHex(this.data.id)
     }
-    if (data.id !== this.data.id) {
-      console.error(`'${this.data.id}': '${data.id}',`)
-    }
 
     if (data.height === 1) {
       this.genesis = true
@@ -120,12 +118,6 @@ module.exports = class Block {
       this.transactions[0] = this.transactions[1]
       this.transactions[1] = temp
     }
-
-    if (!this.verification.verified && this.data.height !== 1) {
-      // console.error(JSON.stringify(data, null, 2))
-      console.error(this.serialized)
-      console.error(this.verification)
-    }
   }
 
   /**
@@ -154,9 +146,13 @@ module.exports = class Block {
    * @return {String}
    */
   toString() {
-    return `${this.data.id}, height: ${this.data.height}, ${
-      this.data.numberOfTransactions
-    } transactions, verified: ${this.verification.verified}, errors:${
+    return `${
+      this.data.id
+    }, height: ${this.data.height.toLocaleString()}, ${pluralize(
+      'transaction',
+      this.data.numberOfTransactions,
+      true,
+    )}, verified: ${this.verification.verified}, errors: ${
       this.verification.errors
     }` // eslint-disable-line max-len
   }

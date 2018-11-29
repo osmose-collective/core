@@ -36,6 +36,8 @@ beforeEach(async () => {
 
   peerMock = new Peer('0.0.0.99', 4000) // this peer is just here to be picked up by tests below (not added to initial peers)
   Object.assign(peerMock, peerMock.headers, { status: 200 })
+  peerMock.nethash =
+    'd9acd04bde4234a81addb8482333b4ac906bed7be5a9970ce8ada428bd083192'
 
   axiosMock.reset() // important: resets any existing mocking behavior
 })
@@ -45,9 +47,15 @@ describe('Monitor', () => {
     expect(monitor).toBeObject()
   })
 
-  describe.skip('updateNetworkStatus', () => {
+  describe('updateNetworkStatus', () => {
     it('should be a function', () => {
       expect(monitor.updateNetworkStatus).toBeFunction()
+    })
+  })
+
+  describe('updateNetworkStatusIfNotEnoughPeers', () => {
+    it('should be a function', () => {
+      expect(monitor.updateNetworkStatusIfNotEnoughPeers).toBeFunction()
     })
   })
 
@@ -237,12 +245,6 @@ describe('Monitor', () => {
   describe('broadcastTransactions', () => {
     it('should be a function', () => {
       expect(monitor.broadcastTransactions).toBeFunction()
-    })
-
-    it('should be ok', () => {
-      expect(monitor.broadcastTransactions).toBeFunction()
-
-      expect(monitor.toJson)
     })
   })
 

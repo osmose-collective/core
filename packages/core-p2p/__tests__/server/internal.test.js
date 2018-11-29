@@ -1,4 +1,6 @@
 const { Block, Transaction } = require('@arkecosystem/crypto').models
+const genTransfer = require('@arkecosystem/core-test-utils/lib/generators/transactions/transfer')
+const blockFixture = require('../../../core-debugger-cli/__tests__/__fixtures__/block.json')
 const app = require('../__support__/setup')
 const utils = require('../__support__/utils')
 
@@ -47,10 +49,10 @@ describe('API - Internal', () => {
 
   describe('POST /blocks', () => {
     it('should be ok', async () => {
+      const block = new Block(blockFixture.data)
       const response = await utils.POST('internal/blocks', {
-        block: genesisBlock.toJson(),
+        block: block.toJson(),
       })
-
       expect(response.status).toBe(204)
     })
 
@@ -64,10 +66,11 @@ describe('API - Internal', () => {
     })
   })
 
-  describe.skip('POST /transactions/verify', () => {
+  describe('POST /transactions/verify', () => {
     it('should be ok', async () => {
+      const transaction = genTransfer('testnet')[0]
       const response = await utils.POST('internal/transactions/verify', {
-        transaction: genesisTransaction,
+        transaction: Transaction.serialize(transaction).toString('hex'),
       })
 
       expect(response.status).toBe(200)

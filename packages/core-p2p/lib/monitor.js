@@ -1,16 +1,23 @@
+/* eslint no-restricted-globals: "off" */
+
 const prettyMs = require('pretty-ms')
-const moment = require('moment')
+const fs = require('fs')
+const dayjs = require('dayjs-ext')
 const delay = require('delay')
-const { flatten, groupBy } = require('lodash')
+const flatten = require('lodash/flatten')
+const groupBy = require('lodash/groupBy')
+const sample = require('lodash/sample')
+const shuffle = require('lodash/shuffle')
+const take = require('lodash/take')
 const pluralize = require('pluralize')
 
 const { slots } = require('@arkecosystem/crypto')
 
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const config = container.resolvePlugin('config')
-const logger = container.resolvePlugin('logger')
-const emitter = container.resolvePlugin('event-emitter')
+const config = app.resolvePlugin('config')
+const logger = app.resolvePlugin('logger')
+const emitter = app.resolvePlugin('event-emitter')
 
 const Peer = require('./peer')
 const { guard } = require('./court')
@@ -26,7 +33,12 @@ class Monitor {
    */
   constructor() {
     this.peers = {}
-    this.startForgers = moment().add(config.peers.coldStart || 30, 'seconds')
+    this.coldStartPeriod = dayjs().add(config.peers.coldStart || 30, 'seconds')
+
+    // Holds temporary peers which are in the process of being accepted. Prevents that
+    // peers who are not accepted yet, but send multiple requests in a short timeframe will
+    // get processed multiple times in `acceptNewPeer`.
+    this.pendingPeers = {}
   }
 
   /**
@@ -49,6 +61,32 @@ class Monitor {
         )
       : await this.updateNetworkStatus(options.networkStart)
 
+    for (const [version, peers] of Object.entries(
+      groupBy(this.peers, 'version'),
+    )) {
+      logger.info(
+        `Discovered ${pluralize(
+          'peer',
+          peers.length,
+          true,
+        )} with ${version} as version.`,
+      )
+    }
+
+    if (config.network.name !== 'mainnet') {
+      for (const [hashid, peers] of Object.entries(
+        groupBy(this.peers, 'hashid'),
+      )) {
+        logger.info(
+          `Discovered ${pluralize(
+            'peer',
+            peers.length,
+            true,
+          )} with ${hashid} as hashid.`,
+        )
+      }
+    }
+
     return this
   }
 
@@ -58,6 +96,10 @@ class Monitor {
    * @return {Promise}
    */
   async updateNetworkStatus(networkStart) {
+    if (process.env.NODE_ENV === 'test') {
+      return
+    }
+
     if (networkStart) {
       logger.warn(
         'Skipped peer discovery because the relay is in genesis-start mode.',
@@ -73,32 +115,53 @@ class Monitor {
     }
 
     try {
-      const realEnvironment = process.env.ARK_ENV !== 'test'
-
-      if (realEnvironment) {
+      if (process.env.ARK_ENV !== 'test') {
         await this.discoverPeers()
         await this.cleanPeers()
-      }
 
-      if (
-        Object.keys(this.peers).length < config.peers.list.length - 1 &&
-        realEnvironment
-      ) {
-        config.peers.list.forEach(peer => {
-          this.peers[peer.ip] = new Peer(peer.ip, peer.port)
-        }, this)
+        if (!this.hasMinimumPeers()) {
+          this.__addPeers(config.peers.list)
 
-        return this.updateNetworkStatus()
+          logger.info("Couldn't find enough peers, trying again in 5 seconds.")
+
+          await delay(5000)
+
+          return this.updateNetworkStatus()
+        }
       }
     } catch (error) {
       logger.error(`Network Status: ${error.message}`)
 
-      config.peers.list.forEach(peer => {
-        this.peers[peer.ip] = new Peer(peer.ip, peer.port)
-      }, this)
+      this.__addPeers(config.peers.list)
+
+      logger.info('Failed to discover peers, trying again in 5 seconds.')
+
+      if (process.env.NODE_ENV !== 'test') {
+        await delay(5000)
+      }
 
       return this.updateNetworkStatus()
     }
+  }
+
+  /**
+   * Updates the network status if not enough peers are available.
+   * NOTE: This is usually only necessary for nodes without incoming requests,
+   * since the available peers are depleting over time due to suspensions.
+   * @return {void}
+   */
+  async updateNetworkStatusIfNotEnoughPeers() {
+    if (!this.hasMinimumPeers() && process.env.ARK_ENV !== 'test') {
+      await this.updateNetworkStatus()
+    }
+  }
+
+  /**
+   * Returns if the minimum amount of peers are available.
+   * @return {Boolean}
+   */
+  hasMinimumPeers() {
+    return Object.keys(this.peers).length >= config.peers.minimumNetworkReach
   }
 
   /**
@@ -107,7 +170,7 @@ class Monitor {
    * @throws {Error} If invalid peer
    */
   async acceptNewPeer(peer) {
-    if (this.config.disableDiscovery) {
+    if (this.config.disableDiscovery && !this.pendingPeers[peer.ip]) {
       logger.warn(
         `Rejected ${peer.ip} because the relay is in non-discovery mode.`,
       )
@@ -117,14 +180,16 @@ class Monitor {
     if (
       this.guard.isSuspended(peer) ||
       this.guard.isMyself(peer) ||
+      this.pendingPeers[peer.ip] ||
       process.env.ARK_ENV === 'test'
     ) {
       return
     }
 
     const newPeer = new Peer(peer.ip, peer.port)
+    newPeer.setHeaders(peer)
 
-    if (this.guard.isBlacklisted(peer.ip)) {
+    if (this.guard.isBlacklisted(peer)) {
       logger.debug(`Rejected peer ${peer.ip} as it is blacklisted`)
 
       return this.guard.suspend(newPeer)
@@ -157,6 +222,8 @@ class Monitor {
     }
 
     try {
+      this.pendingPeers[peer.ip] = true
+
       await newPeer.ping(1500)
 
       this.peers[peer.ip] = newPeer
@@ -170,6 +237,8 @@ class Monitor {
       )
 
       this.guard.suspend(newPeer)
+    } finally {
+      delete this.pendingPeers[peer.ip]
     }
   }
 
@@ -184,8 +253,10 @@ class Monitor {
   /**
    * Clear peers which aren't responding.
    * @param {Boolean} fast
+   * @param {Boolean} tracker
+   * @param {Boolean} forcePing
    */
-  async cleanPeers(fast = false, tracker = true) {
+  async cleanPeers(fast = false, tracker = true, forcePing = false) {
     const keys = Object.keys(this.peers)
     let count = 0
     let unresponsivePeers = 0
@@ -197,7 +268,7 @@ class Monitor {
       keys.map(async ip => {
         const peer = this.getPeer(ip)
         try {
-          await peer.ping(pingDelay)
+          await peer.ping(pingDelay, forcePing)
 
           if (tracker) {
             logger.printTracker('Peers Discovery', ++count, max)
@@ -224,7 +295,9 @@ class Monitor {
         `${max -
           unresponsivePeers} of ${max} peers on the network are responsive`,
       )
-      logger.info(`Median Network Height: ${this.getNetworkHeight()}`)
+      logger.info(
+        `Median Network Height: ${this.getNetworkHeight().toLocaleString()}`,
+      )
       logger.info(`Network PBFT status: ${this.getPBFTForgingStatus()}`)
     }
   }
@@ -305,7 +378,7 @@ class Monitor {
       return false
     })
 
-    const randomPeer = peers[(peers.length * Math.random()) << 0]
+    const randomPeer = sample(peers)
     if (!randomPeer) {
       failedAttempts++
 
@@ -342,15 +415,15 @@ class Monitor {
    */
   async discoverPeers() {
     try {
-      const list = await this.getRandomPeer().getPeers()
+      const peers = await this.getRandomPeer().getPeers()
 
-      list.forEach(peer => {
+      peers.forEach(peer => {
         if (
           Peer.isOk(peer) &&
           !this.getPeer(peer.ip) &&
           !this.guard.isMyself(peer)
         ) {
-          this.peers[peer.ip] = new Peer(peer.ip, peer.port)
+          this.__addPeer(peer)
         }
       })
 
@@ -373,12 +446,12 @@ class Monitor {
    * @return {Number}
    */
   getNetworkHeight() {
-    const median = this.getPeers()
+    const medians = this.getPeers()
       .filter(peer => peer.state.height)
       .map(peer => peer.state.height)
       .sort()
 
-    return median[~~(median.length / 2)]
+    return medians[Math.floor(medians.length / 2)] || 0
   }
 
   /**
@@ -411,13 +484,10 @@ class Monitor {
 
   async getNetworkState() {
     if (!this.__isColdStartActive()) {
-      await this.cleanPeers(true, false)
+      await this.cleanPeers(true, false, true)
     }
 
-    return networkState(
-      this,
-      container.resolvePlugin('blockchain').getLastBlock(),
-    )
+    return networkState(this, app.resolvePlugin('blockchain').getLastBlock())
   }
 
   /**
@@ -432,7 +502,7 @@ class Monitor {
     await this.guard.resetSuspendedPeers()
 
     // Ban peer who caused the fork
-    const forkedBlock = container.resolve('state').forkedBlock
+    const forkedBlock = app.resolve('state').forkedBlock
     if (forkedBlock) {
       this.suspendPeer(forkedBlock.ip)
     }
@@ -487,7 +557,7 @@ class Monitor {
    * @return {Promise}
    */
   async broadcastBlock(block) {
-    const blockchain = container.resolvePlugin('blockchain')
+    const blockchain = app.resolvePlugin('blockchain')
 
     if (!blockchain) {
       logger.info(
@@ -523,20 +593,24 @@ class Monitor {
     }
 
     logger.info(
-      `Broadcasting block ${block.data.height.toLocaleString()} to ${
-        peers.length
-      } peers`,
+      `Broadcasting block ${block.data.height.toLocaleString()} to ${pluralize(
+        'peer',
+        peers.length,
+        true,
+      )}`,
     )
 
     await Promise.all(peers.map(peer => peer.postBlock(block.toJson())))
   }
 
   /**
-   * Placeholder method to broadcast transactions to peers.
+   * Broadcast transactions to a fixed number of random peers.
    * @param {Transaction[]} transactions
    */
   async broadcastTransactions(transactions) {
-    const peers = this.getPeers()
+    const maxPeersBroadcast = app.resolveOptions('p2p').maxPeersBroadcast
+    const peers = take(shuffle(this.getPeers()), maxPeersBroadcast)
+
     logger.debug(
       `Broadcasting ${pluralize(
         'transaction',
@@ -545,12 +619,8 @@ class Monitor {
       )} to ${pluralize('peer', peers.length, true)}`,
     )
 
-    const transactionsV1 = []
-    transactions.forEach(transaction =>
-      transactionsV1.push(transaction.toJson()),
-    )
-
-    return Promise.all(peers.map(peer => peer.postTransactions(transactionsV1)))
+    transactions = transactions.map(tx => tx.toJson())
+    return Promise.all(peers.map(peer => peer.postTransactions(transactions)))
   }
 
   /**
@@ -593,7 +663,7 @@ class Monitor {
       return state
     }
 
-    const lastBlock = container.resolve('state').getLastBlock()
+    const lastBlock = app.resolve('state').getLastBlock()
 
     // Do nothing if majority of peers are lagging behind
     if (commonHeightGroups.length > 1) {
@@ -603,9 +673,7 @@ class Monitor {
             'peer',
             peersMostCommonHeight.length,
             true,
-          )} are at height ${
-            peersMostCommonHeight[0].state.height
-          } and lagging behind last height ${lastBlock.data.height}. :zzz:`,
+          )} are at height ${peersMostCommonHeight[0].state.height.toLocaleString()} and lagging behind last height ${lastBlock.data.height.toLocaleString()}. :zzz:`,
         )
         return state
       }
@@ -629,9 +697,7 @@ class Monitor {
       }
 
       logger.info(
-        `Detected peers at the same height ${
-          peersMostCommonHeight[0].state.height
-        } with different block ids: ${JSON.stringify(
+        `Detected peers at the same height ${peersMostCommonHeight[0].state.height.toLocaleString()} with different block ids: ${JSON.stringify(
           Object.keys(groupedByCommonId).map(
             k => `${k}: ${groupedByCommonId[k].length}`,
           ),
@@ -669,9 +735,13 @@ class Monitor {
         })
 
         logger.debug(
-          `Banned ${pluralize('peer', peersToBan.length, true)} at height '${
-            peersMostCommonHeight[0].state.height
-          }' which do not have common id '${chosenPeers[0].state.header.id}'.`,
+          `Banned ${pluralize(
+            'peer',
+            peersToBan.length,
+            true,
+          )} at height '${peersMostCommonHeight[0].state.height.toLocaleString()}' which do not have common id '${
+            chosenPeers[0].state.header.id
+          }'.`,
         )
       } else {
         logger.info(`But got enough common id quota: ${quota} :sparkles:`)
@@ -680,9 +750,7 @@ class Monitor {
       // Under certain circumstances the headers can be missing (i.e. seed peers when starting up)
       const commonHeader = peersMostCommonHeight[0].state.header
       logger.info(
-        `All peers at most common height ${
-          peersMostCommonHeight[0].state.height
-        } share the same block id${
+        `All peers at most common height ${peersMostCommonHeight[0].state.height.toLocaleString()} share the same block id${
           commonHeader ? ` '${commonHeader.id}'` : ''
         }. :pray:`,
       )
@@ -692,23 +760,50 @@ class Monitor {
   }
 
   /**
+   * Dump the list of active peers.
+   * @return {void}
+   */
+  dumpPeers() {
+    const peers = Object.values(this.peers).map(peer => ({
+      ip: peer.ip,
+      port: peer.port,
+      version: peer.version,
+    }))
+
+    try {
+      fs.writeFileSync(
+        `${process.env.ARK_PATH_CONFIG}/peers_backup.json`,
+        JSON.stringify(peers, null, 2),
+      )
+    } catch (err) {
+      logger.error(`Failed to dump the peer list because of "${err.message}"`)
+    }
+  }
+
+  /**
    * Filter the initial seed list.
    * @return {void}
    */
   __filterPeers() {
     if (!config.peers.list) {
-      container.forceExit('No seed peers defined in peers.json :interrobang:')
+      app.forceExit('No seed peers defined in peers.json :interrobang:')
     }
 
-    const filteredPeers = config.peers.list.filter(
-      peer => !this.guard.isMyself(peer) || !this.guard.isValidPort(peer),
+    let peers = config.peers.list.map(peer => {
+      peer.version = app.getVersion()
+      return peer
+    })
+
+    if (config.peers_backup) {
+      peers = { ...peers, ...config.peers_backup }
+    }
+
+    const filteredPeers = Object.values(peers).filter(
+      peer =>
+        !this.guard.isMyself(peer) ||
+        !this.guard.isValidPort(peer) ||
+        !this.guard.isValidVersion(peer),
     )
-
-    // if (!filteredPeers.length) {
-    //   logger.error('No external peers found in peers.json :interrobang:')
-
-    //   process.exit(1)
-    // }
 
     for (const peer of filteredPeers) {
       this.peers[peer.ip] = new Peer(peer.ip, peer.port)
@@ -720,7 +815,7 @@ class Monitor {
    * @return {[]String}
    */
   async __getRecentBlockIds() {
-    return container.resolvePlugin('database').getRecentBlockIds()
+    return app.resolvePlugin('database').getRecentBlockIds()
   }
 
   /**
@@ -729,7 +824,7 @@ class Monitor {
    * not all peers are up, or the network is not active
    */
   __isColdStartActive() {
-    return this.startForgers > moment()
+    return this.coldStartPeriod.isAfter(dayjs())
   }
 
   /**
@@ -761,6 +856,42 @@ class Monitor {
       )
     } catch (error) {
       logger.error(error.message)
+    }
+  }
+
+  /**
+   * Add a new peer after it passes a few checks.
+   * @param  {Peer} peer
+   * @return {void}
+   */
+  __addPeer(peer) {
+    if (this.guard.isBlacklisted(peer)) {
+      return
+    }
+
+    if (!this.guard.isValidVersion(peer)) {
+      return
+    }
+
+    if (!this.guard.isValidNetwork(peer)) {
+      return
+    }
+
+    if (!this.guard.isValidPort(peer)) {
+      return
+    }
+
+    this.peers[peer.ip] = new Peer(peer.ip, peer.port)
+  }
+
+  /**
+   * Add new peers after they pass a few checks.
+   * @param  {Peer[]} peers
+   * @return {void}
+   */
+  __addPeers(peers) {
+    for (const peer of peers) {
+      this.__addPeer(peer)
     }
   }
 }

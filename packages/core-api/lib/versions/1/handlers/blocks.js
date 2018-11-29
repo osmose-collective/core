@@ -1,12 +1,11 @@
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 const { bignumify } = require('@arkecosystem/core-utils')
 
-const config = container.resolvePlugin('config')
-const blockchain = container.resolvePlugin('blockchain')
+const config = app.resolvePlugin('config')
+const blockchain = app.resolvePlugin('blockchain')
 
 const utils = require('../utils')
 const schema = require('../schemas/blocks')
-const { blocks: repository } = require('../../../repositories')
 
 /**
  * @type {Object}
@@ -18,19 +17,9 @@ exports.index = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const { count, rows } = await repository.findAll({
-      ...request.query,
-      ...utils.paginate(request),
-    })
+    const data = await request.server.methods.v1.blocks.index(request)
 
-    if (!rows) {
-      return utils.respondWith('No blocks found', true)
-    }
-
-    return utils.respondWith({
-      blocks: utils.toCollection(request, rows, 'block'),
-      count,
-    })
+    return utils.respondWithCache(data, h)
   },
   config: {
     plugins: {
@@ -51,18 +40,9 @@ exports.show = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const block = await repository.findById(request.query.id)
+    const data = await request.server.methods.v1.blocks.show(request)
 
-    if (!block) {
-      return utils.respondWith(
-        `Block with id ${request.query.id} not found`,
-        true,
-      )
-    }
-
-    return utils.respondWith({
-      block: utils.toResource(request, block, 'block'),
-    })
+    return utils.respondWithCache(data, h)
   },
   config: {
     plugins: {
@@ -131,7 +111,7 @@ exports.fee = {
   handler(request, h) {
     return utils.respondWith({
       fee: config.getConstants(blockchain.getLastBlock().data.height).fees
-        .transfer,
+        .staticFees.transfer,
     })
   },
 }
@@ -147,6 +127,7 @@ exports.fees = {
    */
   handler(request, h) {
     const fees = config.getConstants(blockchain.getLastBlock().data.height).fees
+      .staticFees
 
     return utils.respondWith({
       fees: {
@@ -171,7 +152,7 @@ exports.milestone = {
    */
   handler(request, h) {
     return utils.respondWith({
-      milestone: ~~(blockchain.getLastBlock().data.height / 3000000),
+      milestone: Math.floor(blockchain.getLastBlock().data.height / 3000000),
     })
   },
 }
@@ -235,8 +216,8 @@ exports.status = {
     return utils.respondWith({
       epoch: constants.epoch,
       height: lastBlock.data.height,
-      fee: constants.fees.transfer,
-      milestone: ~~(lastBlock.data.height / 3000000),
+      fee: constants.fees.staticFees.transfer,
+      milestone: Math.floor(lastBlock.data.height / 3000000),
       nethash: config.network.nethash,
       reward: constants.reward,
       supply: +bignumify(config.genesisBlock.totalAmount)

@@ -1,4 +1,5 @@
 const { createContainer } = require('awilix')
+const semver = require('semver')
 const delay = require('delay')
 const PluginRegistrar = require('./registrars/plugin')
 const Environment = require('./environment')
@@ -11,6 +12,7 @@ module.exports = class Container {
    */
   constructor() {
     this.container = createContainer()
+    this.exitEvents = ['SIGINT', 'exit']
 
     /**
      * May be used by CLI programs to suppress the shutdown
@@ -18,18 +20,32 @@ module.exports = class Container {
      */
     this.silentShutdown = false
 
-    this.exitEvents = ['SIGINT', 'exit']
-
-    this.__registerExitHandler()
+    /**
+     * The git commit hash of the repository. Used during development to
+     * easily idenfity nodes based on their commit hash and version.
+     */
+    try {
+      this.hashid = require('child_process')
+        .execSync('git rev-parse --short HEAD')
+        .toString()
+        .trim()
+    } catch (e) {
+      this.hashid = 'unknown'
+    }
   }
 
   /**
-   * Set up the container.
+   * Set up the app.
+   * @param  {String} version
    * @param  {Object} variables
    * @param  {Object} options
    * @return {void}
    */
-  async setUp(variables, options = {}) {
+  async setUp(version, variables, options = {}) {
+    this.__registerExitHandler()
+
+    this.setVersion(version)
+
     if (variables.remote) {
       const remoteLoader = new RemoteLoader(variables)
       await remoteLoader.setUp()
@@ -48,7 +64,7 @@ module.exports = class Container {
   }
 
   /**
-   * Tear down the container.
+   * Tear down the app.
    * @return {Promise}
    */
   async tearDown() {
@@ -151,6 +167,37 @@ module.exports = class Container {
     }
 
     process.exit(exitCode)
+  }
+
+  /**
+   * Get the application git commit hash.
+   * @throws {String}
+   */
+  getHashid() {
+    return this.hashid
+  }
+
+  /**
+   * Get the application version.
+   * @throws {String}
+   */
+  getVersion() {
+    return this.version
+  }
+
+  /**
+   * Set the application version.
+   * @param  {String} version
+   * @return {void}
+   */
+  setVersion(version) {
+    if (!semver.valid(version)) {
+      this.forceExit(
+        `The provided version ("${version}") is invalid. Please check https://semver.org/ and make sure you follow the spec.`,
+      )
+    }
+
+    this.version = version
   }
 
   /**

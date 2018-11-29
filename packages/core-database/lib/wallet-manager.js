@@ -2,10 +2,10 @@ const { crypto, formatArktoshi } = require('@arkecosystem/crypto')
 const { Wallet } = require('@arkecosystem/crypto').models
 const { TRANSACTION_TYPES } = require('@arkecosystem/crypto').constants
 const { roundCalculator } = require('@arkecosystem/core-utils')
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const config = container.resolvePlugin('config')
-const logger = container.resolvePlugin('logger')
+const config = app.resolvePlugin('config')
+const logger = app.resolvePlugin('logger')
 
 const pluralize = require('pluralize')
 
@@ -255,9 +255,12 @@ module.exports = class WalletManager {
       }
     }
 
-    logger.debug(`Loaded ${delegates.length} active ${
-      pluralize('delegate', delegates.length)
-    }`)
+    logger.debug(
+      `Loaded ${delegates.length} active ${pluralize(
+        'delegate',
+        delegates.length,
+      )}`,
+    )
 
     return delegates
   }
@@ -363,7 +366,7 @@ module.exports = class WalletManager {
     const delegate = this.byPublicKey[block.data.generatorPublicKey]
 
     if (!delegate) {
-      container.forceExit(
+      app.forceExit(
         `Failed to lookup generator '${
           block.data.generatorPublicKey
         }' of block '${block.data.id}'. :skull:`,
@@ -413,14 +416,17 @@ module.exports = class WalletManager {
 
     const sender = this.findByPublicKey(senderPublicKey)
     const recipient = this.findByAddress(recipientId)
+    const errors = []
 
+    // specific verifications / adjustments depending on transaction type
     if (
       type === TRANSACTION_TYPES.DELEGATE_REGISTRATION &&
       this.byUsername[asset.delegate.username.toLowerCase()]
     ) {
       logger.error(
-        `Can't apply transaction ${data.id}: delegate name already taken.`,
-        JSON.stringify(data),
+        `Can't apply transaction ${
+          data.id
+        }: delegate name '${asset.delegate.username.toLowerCase()}' already taken.`,
       )
       throw new Error(
         `Can't apply transaction ${data.id}: delegate name already taken.`,
@@ -433,10 +439,9 @@ module.exports = class WalletManager {
       !this.__isDelegate(asset.votes[0].slice(1))
     ) {
       logger.error(
-        `Can't apply vote transaction: delegate ${
+        `Can't apply vote transaction ${data.id}: delegate ${
           asset.votes[0]
         } does not exist.`,
-        JSON.stringify(data),
       )
       throw new Error(
         `Can't apply transaction ${data.id}: delegate ${
@@ -445,16 +450,20 @@ module.exports = class WalletManager {
       )
     } else if (type === TRANSACTION_TYPES.SECOND_SIGNATURE) {
       data.recipientId = ''
-    } else if (this.__isException(data)) {
+    }
+
+    // handle exceptions / verify that we can apply the transaction to the sender
+    if (this.__isException(data)) {
       logger.warn(
-        'Transaction forcibly applied because it has been added as an exception:',
-        data,
+        `Transaction ${
+          data.id
+        } forcibly applied because it has been added as an exception.`,
       )
-    } else if (!sender.canApply(data)) {
+    } else if (!sender.canApply(data, errors)) {
       logger.error(
-        `Can't apply transaction for ${sender.address}: ${JSON.stringify(
-          data,
-        )}`,
+        `Can't apply transaction id:${data.id} from sender:${
+          sender.address
+        } due to ${JSON.stringify(errors)}`,
       )
       logger.debug(`Audit: ${JSON.stringify(sender.auditApply(data), null, 2)}`)
       throw new Error(`Can't apply transaction ${data.id}`)

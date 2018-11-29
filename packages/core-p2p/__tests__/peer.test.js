@@ -61,12 +61,16 @@ describe('Peer', () => {
     })
   })
 
-  describe.skip('postBlock', () => {
+  describe('postBlock', () => {
     it('should be a function', () => {
       expect(peerMock.postBlock).toBeFunction()
     })
 
     it('should be ok', async () => {
+      axiosMock
+        .onPost(`${peerMock.url}/peer/blocks`)
+        .reply(200, { success: true }, peerMock.headers)
+
       const response = await peerMock.postBlock(genesisBlock.toJson())
 
       expect(response).toBeObject()
@@ -81,6 +85,10 @@ describe('Peer', () => {
     })
 
     it('should be ok', async () => {
+      axiosMock
+        .onPost(`${peerMock.url}/peer/transactions`)
+        .reply(200, { success: true }, peerMock.headers)
+
       const response = await peerMock.postTransactions([
         genesisTransaction.toJson(),
       ])
@@ -161,6 +169,29 @@ describe('Peer', () => {
         expect(peerMock.status).toBe(status)
       },
     )
+  })
+
+  describe('recentlyPinged', () => {
+    it('should be a function', () => {
+      expect(peerMock.recentlyPinged).toBeFunction()
+    })
+
+    it('should be recently pinged', async () => {
+      peerMock.lastPinged = null
+
+      expect(peerMock.recentlyPinged()).toBeFalse()
+
+      axiosMock
+        .onGet(`${peerMock.url}/peer/status`)
+        .reply(() => [200, { success: true }, peerMock.headers])
+
+      const response = await peerMock.ping(5000)
+
+      expect(response).toBeObject()
+      expect(response).toHaveProperty('success')
+      expect(response.success).toBeTrue()
+      expect(peerMock.recentlyPinged()).toBeTrue()
+    })
   })
 
   describe('getPeers', () => {

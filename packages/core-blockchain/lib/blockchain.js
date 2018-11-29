@@ -1,12 +1,13 @@
 /* eslint max-len: "off" */
+/* eslint no-await-in-loop: "off" */
 
 const { slots } = require('@arkecosystem/crypto')
 const { Block } = require('@arkecosystem/crypto').models
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const logger = container.resolvePlugin('logger')
-const config = container.resolvePlugin('config')
-const emitter = container.resolvePlugin('event-emitter')
+const logger = app.resolvePlugin('logger')
+const config = app.resolvePlugin('config')
+const emitter = app.resolvePlugin('event-emitter')
 const delay = require('delay')
 const pluralize = require('pluralize')
 const stateMachine = require('./state-machine')
@@ -46,9 +47,9 @@ module.exports = class Blockchain {
       logger.debug(
         `event '${event}': ${JSON.stringify(
           this.state.blockchain.value,
-        )} -> ${JSON.stringify(nextState.value)} -> actions: ${JSON.stringify(
-          nextState.actions,
-        )}`,
+        )} -> ${JSON.stringify(
+          nextState.value,
+        )} -> actions: [${nextState.actions.map(a => a.type).join(', ')}]`,
       )
     }
 
@@ -93,14 +94,16 @@ module.exports = class Blockchain {
   }
 
   async stop() {
-    logger.info('Stopping Blockchain Manager :chains:')
+    if (!this.isStopped) {
+      logger.info('Stopping Blockchain Manager :chains:')
 
-    this.isStopped = true
-    this.state.clearCheckLater()
+      this.isStopped = true
+      this.state.clearCheckLater()
 
-    this.dispatch('STOP')
+      this.dispatch('STOP')
 
-    this.queue.destroy()
+      this.queue.destroy()
+    }
   }
 
   checkNetwork() {
@@ -141,9 +144,12 @@ module.exports = class Blockchain {
    * @return {void}
    */
   async postTransactions(transactions) {
-    logger.info(`Received ${transactions.length} new ${
-      pluralize('transaction', transactions.length)
-    } :moneybag:`)
+    logger.info(
+      `Received ${transactions.length} new ${pluralize(
+        'transaction',
+        transactions.length,
+      )} :moneybag:`,
+    )
 
     await this.transactionPool.addTransactions(transactions)
   }
@@ -155,12 +161,18 @@ module.exports = class Blockchain {
    */
   queueBlock(block) {
     logger.info(
-      `Received new block at height ${block.height.toLocaleString()} with ${
-        pluralize('transaction', block.numberOfTransactions, true)
-      } from ${block.ip}`,
+      `Received new block at height ${block.height.toLocaleString()} with ${pluralize(
+        'transaction',
+        block.numberOfTransactions,
+        true,
+      )} from ${block.ip}`,
     )
 
-    if (this.state.started && this.state.blockchain.value === 'idle' && !this.state.forked) {
+    if (
+      this.state.started &&
+      this.state.blockchain.value === 'idle' &&
+      !this.state.forked
+    ) {
       this.dispatch('NEWBLOCK')
 
       this.processQueue.push(block)
@@ -203,9 +215,11 @@ module.exports = class Blockchain {
     }
 
     logger.info(
-      `Removing ${
-        pluralize('block', height - newHeight, true)
-      } to reset current round :warning:`,
+      `Removing ${pluralize(
+        'block',
+        height - newHeight,
+        true,
+      )} to reset current round :warning:`,
     )
 
     let count = 0
@@ -284,9 +298,11 @@ module.exports = class Blockchain {
 
     const resetHeight = lastBlock.data.height - nblocks
     logger.info(
-      `Removing ${
-        pluralize('block', nblocks, true)
-      }. Reset to height ${resetHeight.toLocaleString()}`,
+      `Removing ${pluralize(
+        'block',
+        nblocks,
+        true,
+      )}. Reset to height ${resetHeight.toLocaleString()}`,
     )
 
     this.queue.pause()
@@ -312,9 +328,11 @@ module.exports = class Blockchain {
     const blocks = await this.database.getTopBlocks(count)
 
     logger.info(
-      `Removing ${
-        pluralize('block', blocks.length, true)
-      } from height ${blocks[0].height.toLocaleString()}`,
+      `Removing ${pluralize(
+        'block',
+        blocks.length,
+        true,
+      )} from height ${blocks[0].height.toLocaleString()}`,
     )
 
     for (let block of blocks) {
@@ -388,6 +406,9 @@ module.exports = class Blockchain {
       logger.warn(
         `Block ${block.data.height.toLocaleString()} disregarded because verification failed :scroll:`,
       )
+
+      this.transactionPool.purgeSendersWithInvalidTransactions(block)
+
       return callback()
     }
 
@@ -401,6 +422,9 @@ module.exports = class Blockchain {
     } catch (error) {
       logger.error(`Refused new block ${JSON.stringify(block.data)}`)
       logger.debug(error.stack)
+
+      this.transactionPool.purgeBlock(block)
+
       this.dispatch('FORK')
       return callback()
     }
@@ -413,7 +437,7 @@ module.exports = class Blockchain {
       }
     } catch (error) {
       logger.warn(
-        `Can't broadcast properly block ${JSON.stringify(block.data.heigt)}`,
+        `Can't properly broadcast block ${block.data.height.toLocaleString()}`,
       )
       logger.debug(error.stack)
     }
@@ -531,7 +555,7 @@ module.exports = class Blockchain {
       return true
     }
 
-    block = block || this.state.getLastBlock()
+    block = block || this.getLastBlock()
 
     return (
       slots.getTime() - block.data.timestamp <
@@ -549,7 +573,7 @@ module.exports = class Blockchain {
       return true
     }
 
-    block = block || this.state.getLastBlock()
+    block = block || this.getLastBlock()
 
     const remaining = slots.getTime() - block.data.timestamp
     logger.info(`Remaining block timestamp ${remaining} :hourglass:`)
@@ -565,6 +589,14 @@ module.exports = class Blockchain {
    */
   getLastBlock() {
     return this.state.getLastBlock()
+  }
+
+  /**
+   * Get the last height of the blockchain.
+   * @return {Object}
+   */
+  getLastHeight() {
+    return this.state.getLastBlock().data.height
   }
 
   /**
@@ -639,7 +671,7 @@ module.exports = class Blockchain {
    * @return {P2PInterface}
    */
   get p2p() {
-    return container.resolvePlugin('p2p')
+    return app.resolvePlugin('p2p')
   }
 
   /**
@@ -647,7 +679,7 @@ module.exports = class Blockchain {
    * @return {TransactionPool}
    */
   get transactionPool() {
-    return container.resolvePlugin('transactionPool')
+    return app.resolvePlugin('transactionPool')
   }
 
   /**
@@ -655,7 +687,7 @@ module.exports = class Blockchain {
    * @return {ConnectionInterface}
    */
   get database() {
-    return container.resolvePlugin('database')
+    return app.resolvePlugin('database')
   }
 
   /**

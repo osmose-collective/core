@@ -1,7 +1,7 @@
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const config = container.resolvePlugin('config')
-const blockchain = container.resolvePlugin('blockchain')
+const config = app.resolvePlugin('config')
+const blockchain = app.resolvePlugin('blockchain')
 
 const utils = require('../utils')
 
@@ -17,7 +17,7 @@ exports.fee = {
   handler(request, h) {
     return utils.respondWith({
       fee: config.getConstants(blockchain.getLastBlock().data.height).fees
-        .secondSignature,
+        .staticFees.secondSignature,
     })
   },
 }

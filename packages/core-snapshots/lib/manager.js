@@ -1,9 +1,9 @@
 /* eslint max-len: "off" */
 
 const pick = require('lodash/pick')
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const logger = container.resolvePlugin('logger')
+const logger = app.resolvePlugin('logger')
 const database = require('./db')
 const utils = require('./utils')
 const {
@@ -44,8 +44,8 @@ module.exports = class SnapshotManager {
       skipCompression: params.meta.skipCompression,
     }
 
-    utils.writeMetaFile(metaInfo)
     this.database.close()
+    utils.writeMetaFile(metaInfo)
   }
 
   async importData(options) {
@@ -62,13 +62,13 @@ module.exports = class SnapshotManager {
     logger.info(
       `Import from folder ${
         params.meta.folder
-      } completed. Last block in database: ${lastBlock.height} :+1:`,
+      } completed. Last block in database: ${lastBlock.height.toLocaleString()} :+1:`,
     )
     if (!params.skipRestartRound) {
       const newLastBlock = await this.database.rollbackChain(lastBlock.height)
       logger.info(
         `Rolling back chain to last finished round with last block height ${
-          newLastBlock.height
+          newLastBlock.height.toLocaleString()
         }`,
       )
     }
@@ -93,14 +93,16 @@ module.exports = class SnapshotManager {
 
   async rollbackChain(height) {
     const lastBlock = await this.database.getLastBlock()
-    const config = container.resolvePlugin('config')
+    const config = app.resolvePlugin('config')
     const maxDelegates = config.getConstants(lastBlock.height).activeDelegates
 
     const rollBackHeight = height === -1 ? lastBlock.height : height
     if (rollBackHeight >= lastBlock.height || rollBackHeight < 1) {
-      container.forceExit(
-        `Specified rollback block height: ${rollBackHeight} is not valid. Current database height: ${
-          lastBlock.height
+      app.forceExit(
+        `Specified rollback block height: ${
+          rollBackHeight.toLocaleString()
+        } is not valid. Current database height: ${
+          lastBlock.height.toLocaleString()
         }. Exiting.`,
       )
     }
@@ -119,8 +121,9 @@ module.exports = class SnapshotManager {
 
     const newLastBlock = await this.database.rollbackChain(rollBackHeight)
     logger.info(
-      `Rolling back chain to last finished round ${newLastBlock.height /
-        maxDelegates} with last block height ${newLastBlock.height}`,
+      `Rolling back chain to last finished round ${
+        (newLastBlock.height / maxDelegates).toLocaleString()
+      } with last block height ${newLastBlock.height.toLocaleString()}`,
     )
 
     this.database.close()
@@ -150,7 +153,7 @@ module.exports = class SnapshotManager {
 
     if (exportAction) {
       if (!lastBlock) {
-        container.forceExit('Database is empty. Export not possible.')
+        app.forceExit('Database is empty. Export not possible.')
       }
       params.meta = utils.setSnapshotInfo(params, lastBlock)
       params.queries = await this.database.getExportQueries(

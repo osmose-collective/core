@@ -19,7 +19,11 @@ module.exports = {
   rateLimit: {
     enabled: true,
     pathLimit: false,
-    userLimit: 1000,
+    userLimit: 20,
+    userCache: {
+      expiresIn: 1000,
+    },
     ipWhitelist: ['127.0.0.1', '::ffff:127.0.0.1'],
   },
+  maxPeersBroadcast: 20,
 }

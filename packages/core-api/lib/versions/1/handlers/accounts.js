@@ -1,8 +1,8 @@
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const config = container.resolvePlugin('config')
-const database = container.resolvePlugin('database')
-const blockchain = container.resolvePlugin('blockchain')
+const config = app.resolvePlugin('config')
+const database = app.resolvePlugin('database')
+const blockchain = app.resolvePlugin('blockchain')
 
 const utils = require('../utils')
 const schema = require('../schemas/accounts')
@@ -17,14 +17,9 @@ exports.index = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const { rows } = await database.wallets.findAll({
-      ...request.query,
-      ...utils.paginate(request),
-    })
+    const data = await request.server.methods.v1.accounts.index(request)
 
-    return utils.respondWith({
-      accounts: utils.toCollection(request, rows, 'account'),
-    })
+    return utils.respondWithCache(data, h)
   },
 }
 
@@ -38,15 +33,9 @@ exports.show = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const account = await database.wallets.findById(request.query.address)
+    const data = await request.server.methods.v1.accounts.show(request)
 
-    if (!account) {
-      return utils.respondWith('Account not found', true)
-    }
-
-    return utils.respondWith({
-      account: utils.toResource(request, account, 'account'),
-    })
+    return utils.respondWithCache(data, h)
   },
   config: {
     plugins: {
@@ -67,16 +56,9 @@ exports.balance = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const account = await database.wallets.findById(request.query.address)
+    const data = await request.server.methods.v1.accounts.balance(request)
 
-    if (!account) {
-      return utils.respondWith({ balance: '0', unconfirmedBalance: '0' })
-    }
-
-    return utils.respondWith({
-      balance: account ? `${account.balance}` : '0',
-      unconfirmedBalance: account ? `${account.balance}` : '0',
-    })
+    return utils.respondWithCache(data, h)
   },
   config: {
     plugins: {
@@ -97,13 +79,9 @@ exports.publicKey = {
    * @return {Hapi.Response}
    */
   async handler(request, h) {
-    const account = await database.wallets.findById(request.query.address)
+    const data = await request.server.methods.v1.accounts.publicKey(request)
 
-    if (!account) {
-      return utils.respondWith('Account not found', true)
-    }
-
-    return utils.respondWith({ publicKey: account.publicKey })
+    return utils.respondWithCache(data, h)
   },
   config: {
     plugins: {
@@ -126,7 +104,7 @@ exports.fee = {
   handler(request, h) {
     return utils.respondWith({
       fee: config.getConstants(blockchain.getLastBlock().data.height).fees
-        .delegateRegistration,
+        .staticFees.delegateRegistration,
     })
   },
 }

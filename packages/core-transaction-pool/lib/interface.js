@@ -1,11 +1,11 @@
-const container = require('@arkecosystem/core-container')
+const app = require('@arkecosystem/core-container')
 
-const logger = container.resolvePlugin('logger')
+const logger = app.resolvePlugin('logger')
 
-const moment = require('moment')
+const dayjs = require('dayjs-ext')
 const PoolWalletManager = require('./pool-wallet-manager')
 
-const database = container.resolvePlugin('database')
+const database = app.resolvePlugin('database')
 const dynamicFeeMatch = require('./utils/dynamicfee-matcher')
 
 module.exports = class TransactionPoolInterface {
@@ -26,6 +26,14 @@ module.exports = class TransactionPoolInterface {
    */
   driver() {
     return this.driver
+  }
+
+  /**
+   * Disconnect from transaction pool.
+   * @return {void}
+   */
+  disconnect() {
+    throw new Error('Method [disconnect] not implemented!')
   }
 
   /**
@@ -121,9 +129,8 @@ module.exports = class TransactionPoolInterface {
   /**
    * Add many transaction to the pool. Method called from blockchain, upon receiving payload.
    * @param {Array}   transactions
-   * @param {Boolean} isBroadcast
    */
-  addTransactions(transactions, isBroadcast) {
+  addTransactions(transactions) {
     throw new Error('Method [addTransactions] not implemented!')
   }
 
@@ -155,7 +162,7 @@ module.exports = class TransactionPoolInterface {
       return false
     }
 
-    if (this.blockedByPublicKey[senderPublicKey] < moment()) {
+    if (this.blockedByPublicKey[senderPublicKey] < dayjs()) {
       delete this.blockedByPublicKey[senderPublicKey]
       return false
     }
@@ -169,7 +176,7 @@ module.exports = class TransactionPoolInterface {
    * @return {Time} blockReleaseTime
    */
   blockSender(senderPublicKey) {
-    const blockReleaseTime = moment().add(1, 'hours')
+    const blockReleaseTime = dayjs().add(1, 'hours')
 
     this.blockedByPublicKey[senderPublicKey] = blockReleaseTime
 
@@ -192,38 +199,42 @@ module.exports = class TransactionPoolInterface {
    */
   acceptChainedBlock(block) {
     for (const transaction of block.transactions) {
-      const exists = this.transactionExists(transaction.id)
-      if (!exists) {
-        const senderWallet = this.walletManager.exists(
-          transaction.senderPublicKey,
-        )
-          ? this.walletManager.findByPublicKey(transaction.senderPublicKey)
-          : false
-        // if wallet in pool we try to apply transaction
-        if (
-          senderWallet ||
-          this.walletManager.exists(transaction.recipientId)
-        ) {
-          try {
-            this.walletManager.applyPoolTransaction(transaction)
-          } catch (error) {
-            logger.error(`AcceptChainedBlock in pool: ${error}`)
-            this.purgeByPublicKey(transaction.senderPublicKey)
-            this.blockSender(transaction.senderPublicKey)
-          }
+      const senderPublicKey = transaction.senderPublicKey
 
-          if (senderWallet.balance === 0) {
-            this.walletManager.deleteWallet(transaction.senderPublicKey)
-          }
+      const senderWallet = this.walletManager.exists(senderPublicKey)
+        ? this.walletManager.findByPublicKey(senderPublicKey)
+        : false
+
+      const recipientWallet = this.walletManager.exists(transaction.recipientId)
+        ? this.walletManager.findByAddress(transaction.recipientId)
+        : false
+
+      // If sender or recipient wallet in pool we try to apply transaction
+      const exists = this.transactionExists(transaction.id)
+      if (!exists && (senderWallet || recipientWallet)) {
+        try {
+          this.walletManager.applyPoolTransaction(transaction)
+        } catch (error) {
+          logger.error(`AcceptChainedBlock in pool: ${error}`)
+          // Purge sender
+          this.purgeByPublicKey(senderPublicKey)
         }
       } else {
         this.removeTransaction(transaction)
       }
 
-      if (this.getSenderSize(transaction.senderPublicKey) === 0) {
-        this.walletManager.deleteWallet(transaction.senderPublicKey)
+      if (
+        senderWallet &&
+        senderWallet.balance === 0 &&
+        this.getSenderSize(senderPublicKey) === 0
+      ) {
+        this.walletManager.deleteWallet(senderPublicKey)
       }
     }
+
+    app
+      .resolve('state')
+      .removeCachedTransactionIds(block.transactions.map(tx => tx.id))
 
     this.walletManager.applyPoolBlock(block)
   }
@@ -237,12 +248,14 @@ module.exports = class TransactionPoolInterface {
    */
   async buildWallets() {
     this.walletManager.reset()
-    const poolTransactions = await this.getTransactionIdsForForging(
+    const poolTransactionIds = await this.getTransactionIdsForForging(
       0,
       this.getPoolSize(),
     )
 
-    poolTransactions.forEach(transactionId => {
+    app.resolve('state').removeCachedTransactionIds(poolTransactionIds)
+
+    poolTransactionIds.forEach(transactionId => {
       const transaction = this.getTransaction(transactionId)
 
       if (!transaction) {
@@ -267,18 +280,43 @@ module.exports = class TransactionPoolInterface {
     this.walletManager.deleteWallet(senderPublicKey)
   }
 
+  /**
+   * Purges all transactions from senders with at least one
+   * invalid transaction.
+   * @param {Block} block
+   */
+  purgeSendersWithInvalidTransactions(block) {
+    const publicKeys = new Set(
+      block.transactions
+        .filter(tx => !tx.verified)
+        .map(tx => tx.senderPublicKey),
+    )
+
+    publicKeys.forEach(publicKey => this.purgeByPublicKey(publicKey))
+  }
+
+  /**
+   * Purges all transactions from the block.
+   * @param {Block} block
+   */
+  purgeBlock(block) {
+    block.transactions.forEach(tx => this.removeTransaction(tx))
+  }
+
   checkApplyToBlockchain(transaction) {
-    if (
-      !database.walletManager
-        .findByPublicKey(transaction.senderPublicKey)
-        .canApply(transaction)
-    ) {
+    const errors = []
+    const wallet = database.walletManager.findByPublicKey(
+      transaction.senderPublicKey,
+    )
+    if (!wallet.canApply(transaction, errors)) {
       this.removeTransaction(transaction)
 
       logger.debug(
-        `CanApply transaction test failed from transaction pool for transaction ${
+        `CanApply transaction test failed from transaction pool for transaction id:${
           transaction.id
-        }. Possible double spending attack :bomb:`,
+        } due to ${JSON.stringify(
+          errors,
+        )}. Possible double spending attack :bomb:`,
       )
 
       this.purgeByPublicKey(transaction.senderPublicKey)
@@ -288,10 +326,6 @@ module.exports = class TransactionPoolInterface {
     }
 
     return true
-  }
-
-  checkDynamicFeeMatch(transaction) {
-    return dynamicFeeMatch(transaction)
   }
 
   /**
@@ -304,24 +338,5 @@ module.exports = class TransactionPoolInterface {
    */
   senderHasTransactionsOfType(senderPublicKey, transactionType) {
     throw new Error('Method [senderHasTransactionsOfType] not implemented!')
-  }
-
-  /**
-   * Check each of a set of transactions for eligibility to enter the pool.
-   * This method is quick and is used to drop transactions early at the entrance
-   * for which we can quickly assess that will not be allowed to enter the pool.
-   *
-   * So we can avoid the costy validation process only to discover later that a
-   * transaction is not allowed to enter the pool.
-   *
-   * @param {Array} transactions An array of Transaction objects to be checked.
-   * @return { eligible, notEligible } where:
-   * - eligible is an array of Transaction objects, a subset of the input array
-   * - notEligible is an array of objects { transaction, reason } where:
-   *   - transaction is a Transaction object, from the input
-   *   - reason is a String describing why the transaction is not eligible
-   */
-  checkEligibility(transactions) {
-    throw new Error('Method [checkEligibility] not implemented!')
   }
 }

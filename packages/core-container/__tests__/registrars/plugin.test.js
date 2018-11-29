@@ -17,7 +17,7 @@ describe('Plugin Registrar', () => {
   })
 
   it('should load the plugins and their options', () => {
-    ['a', 'b', 'c'].forEach(char => {
+    ;['a', 'b', 'c'].forEach(char => {
       const pluginName = `./plugin-${char}`
       expect(instance.plugins[pluginName]).toBeObject()
     })
@@ -81,7 +81,7 @@ describe('Plugin Registrar', () => {
     })
 
     it('should deregister plugins supporting deregister', async () => {
-      ['a', 'b'].forEach(char => {
+      ;['a', 'b'].forEach(char => {
         plugins[char].plugin.deregister = jest.fn()
       })
 
@@ -103,6 +103,19 @@ describe('Plugin Registrar', () => {
 
       expect(spy).toHaveBeenNthCalledWith(1, 'b')
       expect(spy).toHaveBeenNthCalledWith(2, 'a')
+    })
+  })
+
+  describe('__castOptions', () => {
+    it('should cast options', async () => {
+      const options = {
+        number: '1',
+        notANumber: '0.0.0.0',
+      }
+
+      instance.__castOptions(options)
+      expect(options.number).toEqual(1)
+      expect(options.notANumber).toEqual('0.0.0.0')
     })
   })
 })

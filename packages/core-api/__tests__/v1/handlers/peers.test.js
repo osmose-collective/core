@@ -44,8 +44,6 @@ describe('API 1.0 - Peers', () => {
     it('should fail using limit > 100', async () => {
       const response = await utils.request('GET', 'peers', { limit: 101 })
       utils.expectError(response)
-
-      expect(response.data.error)
     })
 
     it('should fail using invalid parameters', async () => {
@@ -79,16 +77,6 @@ describe('API 1.0 - Peers', () => {
       utils.expectError(response)
 
       expect(response.data.error).toBe("should have required property 'ip'")
-    })
-
-    it.skip('should be ok using known ip address and port', async () => {
-      const response = await utils.request('GET', 'peers/get', {
-        ip: peerIp,
-        port: peerPort,
-      })
-      expect(response).toBeSuccessfulResponse()
-
-      expect(response.data.peer).toBeObject()
     })
 
     it('should fail using unknown ip address and port', async () => {

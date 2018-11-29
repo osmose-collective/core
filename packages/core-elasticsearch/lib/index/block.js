@@ -1,8 +1,11 @@
-const { first, last } = require('lodash')
-const container = require('@arkecosystem/core-container')
+/* eslint no-await-in-loop: "off" */
 
-const database = container.resolvePlugin('database')
-const logger = container.resolvePlugin('logger')
+const first = require('lodash/first')
+const last = require('lodash/last')
+const app = require('@arkecosystem/core-container')
+
+const database = app.resolvePlugin('database')
+const logger = app.resolvePlugin('logger')
 const Index = require('./index')
 const client = require('../services/client')
 const storage = require('../services/storage')

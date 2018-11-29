@@ -1,4 +1,4 @@
-const moment = require('moment')
+const dayjs = require('dayjs-ext')
 const app = require('./__support__/setup')
 
 let poolInterface
@@ -194,12 +194,12 @@ describe('Transaction Pool Interface', () => {
     })
 
     it('should block sender for specified time', async () => {
-      const time = moment()
+      const time = dayjs()
       const blockedTime = poolInterface.blockSender('keykeykey')
-      const duration = moment.duration(blockedTime.diff(time))
+      const duration = blockedTime.diff(time) / 1000 / 60 / 60
 
       expect(poolInterface.isSenderBlocked('keykeykey')).toBeTrue()
-      expect(parseInt(duration.asHours())).toEqual(1)
+      expect(parseInt(duration)).toEqual(1)
     })
   })
 
@@ -224,12 +224,6 @@ describe('Transaction Pool Interface', () => {
   describe('checkApplyToBlockchain', () => {
     it('should be a function', () => {
       expect(poolInterface.checkApplyToBlockchain).toBeFunction()
-    })
-  })
-
-  describe('checkDynamicFeeMatch', () => {
-    it('should be a function', () => {
-      expect(poolInterface.checkDynamicFeeMatch).toBeFunction()
     })
   })
 })

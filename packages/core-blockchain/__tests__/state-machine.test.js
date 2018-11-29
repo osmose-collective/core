@@ -62,11 +62,18 @@ describe('State Machine', () => {
         expect(actionMap.checkLater).toBeFunction()
       })
 
-      it.skip('should dispatch the event "WAKEUP" after a delay', async () => {
-        await expect(() => actionMap.checkLater()).toDispatch(
-          blockchain,
-          'WAKEUP',
-        )
+      it('should dispatch the event "WAKEUP" after a delay', async () => {
+        jest.useFakeTimers()
+        blockchain.dispatch = jest.fn()
+
+        actionMap.checkLater()
+        expect(blockchain.dispatch).not.toBeCalled()
+
+        jest.runAllTimers()
+        expect(blockchain.dispatch).toHaveBeenCalled()
+        expect(blockchain.dispatch).toHaveBeenCalledWith('WAKEUP')
+
+        jest.useRealTimers() // restore standard timers
       })
     })
 
@@ -122,13 +129,13 @@ describe('State Machine', () => {
         expect(actionMap.downloadFinished).toBeFunction()
       })
 
-      describe.skip('if the network has started', () => {
+      describe('if the network has started', () => {
         it('should dispatch the event "SYNCFINISHED"', () => {
           stateMachine.state.networkStart = true
-          expect(() => actionMap.downloadFinished()).toDispatch([
+          expect(actionMap.downloadFinished).toDispatch(
             blockchain,
             'SYNCFINISHED',
-          ])
+          )
         })
 
         it('should toggle its state', () => {

@@ -1,3 +1,5 @@
+/* eslint no-await-in-loop: "off" */
+
 const {
   createServer,
   createSecureServer,
@@ -33,7 +35,24 @@ module.exports = async config => {
   }
 
   for (const [type, server] of Object.entries(servers)) {
-    await server.register({ plugin: plugins.corsHeaders })
+    // TODO: enable after mainnet migration
+    // await server.register({ plugin: plugins.contentType })
+
+    await server.register({
+      plugin: plugins.corsHeaders,
+    })
+
+    await server.register({
+      plugin: plugins.transactionPayload,
+      options: {
+        routes: [
+          {
+            method: 'POST',
+            path: '/api/v2/transactions',
+          },
+        ],
+      },
+    })
 
     await server.register({
       plugin: plugins.whitelist,
@@ -57,9 +76,13 @@ module.exports = async config => {
       options: { validVersions: config.versions.validVersions },
     })
 
-    await server.register({ plugin: require('./plugins/caster') })
+    await server.register({
+      plugin: require('./plugins/caster'),
+    })
 
-    await server.register({ plugin: require('./plugins/validation') })
+    await server.register({
+      plugin: require('./plugins/validation'),
+    })
 
     await server.register({
       plugin: require('hapi-rate-limit'),
