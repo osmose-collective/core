@@ -9,10 +9,10 @@ COPY ./ /home/node/core
 RUN apk add --no-cache --virtual .build-deps make gcc g++ python git \
     && apk add --no-cache bash sudo git openntpd openssl \
     && npm i pm2 -g --loglevel notice \
-    && yarn setup \
+    && yarn global add @arkecosystem/core \
     && yarn cache clean \
     && apk del .build-deps \
     && echo 'node ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 USER node
-ENTRYPOINT ["bash", "-c", "/entrypoint.sh \"$@\"", "--"]
+#ENTRYPOINT ["bash", "-c", "/entrypoint.sh \"$@\"", "--"]
