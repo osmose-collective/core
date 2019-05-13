@@ -51,6 +51,8 @@ openssl genrsa -out bip.key 2048
 openssl rsa -in bip.key -out bip.pub -outform PEM -pubout
 echo "${BIP38}" | openssl rsautl -encrypt -inkey bip.pub -pubin -out bip.dat
 
+chown -R 1000:1000 ./enc
+
 success "Done! Created folder $(echo "${lila}enc${reset}") with all certificates and keys inside."
 success "You are now ready to run your docker $(echo "${yellow}forger")."
 
