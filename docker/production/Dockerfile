@@ -12,7 +12,8 @@ RUN apk add --no-cache --virtual .build-deps make gcc g++ python git \
     && yarn setup \
     && yarn cache clean \
     && apk del .build-deps \
-    && echo 'node ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+    && echo 'node ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers \
+    && chown node:node -R /home/node
 
 USER node
 ENTRYPOINT ["bash", "-c", "/entrypoint.sh \"$@\"", "--"]
